@@ -1,6 +1,8 @@
 use clap::{App, ArgMatches};
 use std::fs::DirBuilder;
 
+use crate::find_repo;
+
 const HEAD: &'static str = "ref: refs/heads/master\n";
 
 const CONFIG: &'static str = "\
@@ -21,7 +23,7 @@ pub fn app<'a, 'b>() -> App<'a, 'b> {
 // .pidgit/
 //    HEAD
 //    config
-//    index  ??
+//    index   <-- no, for now.
 //    objects/
 //    refs/
 //      heads/
@@ -30,13 +32,16 @@ pub fn app<'a, 'b>() -> App<'a, 'b> {
 //
 
 pub fn run(_matches: &ArgMatches) {
-  let gitdir = std::env::current_dir().unwrap().join(".pidgit");
-
-  if gitdir.is_dir() {
+  if let Some(repo) = find_repo() {
     // maybe later: die if we can't initialize a repo from it
-    println!("{} already exists, nothing to do!", gitdir.display());
+    println!(
+      "{} already exists, nothing to do!",
+      repo.work_tree().display()
+    );
     return;
   }
+
+  let gitdir = std::env::current_dir().unwrap().join(".pidgit");
 
   // I think for now, I'm just going to create these imperatively, and later,
   // once the repository is abstracted a bit, rework this to say something like
@@ -48,9 +53,6 @@ pub fn run(_matches: &ArgMatches) {
 
   // config
   std::fs::write(gitdir.join("config"), CONFIG).unwrap();
-
-  // index
-  std::fs::write(gitdir.join("index"), "").unwrap();
 
   // object dir
   DirBuilder::new().create(gitdir.join("objects")).unwrap();
