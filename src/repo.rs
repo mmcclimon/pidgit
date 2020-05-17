@@ -1,6 +1,8 @@
 use std::fs::{DirBuilder, File};
 use std::path::{Path, PathBuf};
 
+use crate::Result;
+
 const GITDIR_NAME: &'static str = ".pidgit";
 
 #[derive(Debug)]
@@ -17,14 +19,14 @@ impl Repository {
     }
   }
 
-  pub fn create_empty(root: &Path) -> Self {
+  pub fn create_empty(root: &Path) -> Result<Self> {
     let gitdir = root.join(GITDIR_NAME);
-    DirBuilder::new().create(&gitdir).unwrap();
+    DirBuilder::new().create(&gitdir)?;
 
-    Repository {
+    Ok(Repository {
       work_tree: root.to_path_buf(),
       gitdir:    gitdir,
-    }
+    })
   }
 
   pub fn work_tree(&self) -> &PathBuf {
@@ -35,19 +37,20 @@ impl Repository {
     &self.gitdir
   }
 
-  pub fn create_file<P>(&self, path: P) -> Result<File, std::io::Error>
+  pub fn create_file<P>(&self, path: P) -> Result<File>
   where
     P: AsRef<Path> + std::fmt::Debug,
   {
-    File::create(self.gitdir.join(path))
+    File::create(self.gitdir.join(path)).map_err(|e| e.into())
   }
 
-  pub fn create_dir<P>(&self, path: P) -> Result<(), std::io::Error>
+  pub fn create_dir<P>(&self, path: P) -> Result<()>
   where
     P: AsRef<Path> + std::fmt::Debug,
   {
     DirBuilder::new()
       .recursive(true)
       .create(self.gitdir.join(path))
+      .map_err(|e| e.into())
   }
 }

@@ -7,5 +7,9 @@ fn main() {
     .subcommands(pidgit::cmd::command_apps())
     .get_matches();
 
-  pidgit::cmd::dispatch(&matches);
+  let res = pidgit::cmd::dispatch(&matches);
+
+  if let Err(err) = res {
+    eprintln!("{}", err);
+  }
 }

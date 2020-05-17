@@ -1,7 +1,7 @@
 use clap::{App, ArgMatches};
 use std::io::Write;
 
-use crate::{find_repo, Repository};
+use crate::{find_repo, Repository, Result};
 
 const HEAD: &'static str = "ref: refs/heads/master\n";
 
@@ -31,37 +31,39 @@ pub fn app<'a, 'b>() -> App<'a, 'b> {
 //      remotes/
 //
 
-pub fn run(_matches: &ArgMatches) {
-  if let Some(repo) = find_repo() {
+pub fn run(_matches: &ArgMatches) -> Result<()> {
+  if let Ok(repo) = find_repo() {
     // maybe later: die if we can't initialize a repo from it
     println!(
       "{} already exists, nothing to do!",
       repo.work_tree().display()
     );
-    return;
+    return Ok(());
   }
 
-  let pwd = std::env::current_dir().unwrap();
-  let repo = Repository::create_empty(&pwd);
+  let pwd = std::env::current_dir()?;
+  let repo = Repository::create_empty(&pwd)?;
 
   // HEAD
-  let mut head = repo.create_file("HEAD").unwrap();
-  head.write_all(HEAD.as_bytes()).unwrap();
+  let mut head = repo.create_file("HEAD")?;
+  head.write_all(HEAD.as_bytes())?;
 
   // config
-  let mut config = repo.create_file("config").unwrap();
-  config.write_all(CONFIG.as_bytes()).unwrap();
+  let mut config = repo.create_file("config")?;
+  config.write_all(CONFIG.as_bytes())?;
 
   // object dir
-  repo.create_dir("objects").unwrap();
+  repo.create_dir("objects")?;
 
   // refs
-  repo.create_dir("refs/heads").unwrap();
-  repo.create_dir("refs/tags").unwrap();
-  repo.create_dir("refs/remotes").unwrap();
+  repo.create_dir("refs/heads")?;
+  repo.create_dir("refs/tags")?;
+  repo.create_dir("refs/remotes")?;
 
   println!(
     "initialized empty pidgit repository at {}",
     repo.gitdir().display()
   );
+
+  Ok(())
 }
