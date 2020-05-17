@@ -1,7 +1,7 @@
 use clap::{App, ArgMatches};
-use std::fs::DirBuilder;
+use std::io::Write;
 
-use crate::find_repo;
+use crate::{find_repo, Repository};
 
 const HEAD: &'static str = "ref: refs/heads/master\n";
 
@@ -41,31 +41,27 @@ pub fn run(_matches: &ArgMatches) {
     return;
   }
 
-  let gitdir = std::env::current_dir().unwrap().join(".pidgit");
-
-  // I think for now, I'm just going to create these imperatively, and later,
-  // once the repository is abstracted a bit, rework this to say something like
-  // Repository.create_new()
-  DirBuilder::new().create(&gitdir).unwrap();
+  let pwd = std::env::current_dir().unwrap();
+  let repo = Repository::create_empty(&pwd);
 
   // HEAD
-  std::fs::write(gitdir.join("HEAD"), HEAD).unwrap();
+  let mut head = repo.create_file("HEAD").unwrap();
+  head.write_all(HEAD.as_bytes()).unwrap();
 
   // config
-  std::fs::write(gitdir.join("config"), CONFIG).unwrap();
+  let mut config = repo.create_file("config").unwrap();
+  config.write_all(CONFIG.as_bytes()).unwrap();
 
   // object dir
-  DirBuilder::new().create(gitdir.join("objects")).unwrap();
+  repo.create_dir("objects").unwrap();
 
   // refs
-  let refdir = gitdir.join("refs");
-  DirBuilder::new().create(&refdir).unwrap();
-  DirBuilder::new().create(refdir.join("heads")).unwrap();
-  DirBuilder::new().create(refdir.join("tags")).unwrap();
-  DirBuilder::new().create(refdir.join("remotes")).unwrap();
+  repo.create_dir("refs/heads").unwrap();
+  repo.create_dir("refs/tags").unwrap();
+  repo.create_dir("refs/remotes").unwrap();
 
   println!(
     "initialized empty pidgit repository at {}",
-    gitdir.display()
+    repo.gitdir().display()
   );
 }
