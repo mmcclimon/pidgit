@@ -1,7 +1,7 @@
 use std::fs::{DirBuilder, File};
 use std::path::{Path, PathBuf};
 
-use crate::Result;
+use crate::{PidgitError, Result};
 
 const GITDIR_NAME: &'static str = ".pidgit";
 
@@ -12,11 +12,34 @@ pub struct Repository {
 }
 
 impl Repository {
-  pub fn from_work_tree(dir: &Path) -> Self {
-    Repository {
+  pub fn from_work_tree(dir: &Path) -> Result<Self> {
+    if !dir.is_dir() {
+      return Err(PidgitError::Generic(format!(
+        "cannot instantiate repo from working tree: {} is not a directory",
+        dir.display()
+      )));
+    }
+
+    Ok(Repository {
       work_tree: dir.to_path_buf(),
       gitdir:    dir.join(GITDIR_NAME),
-    }
+    })
+  }
+
+  pub fn from_gitdir(gitdir: &Path) -> Result<Self> {
+    let path = gitdir.canonicalize()?;
+
+    let parent = path.parent().ok_or_else(|| {
+      PidgitError::Generic(format!(
+        "cannot resolve gitdir: {} has no parent",
+        path.display()
+      ))
+    })?;
+
+    Ok(Repository {
+      work_tree: parent.to_path_buf(),
+      gitdir:    gitdir.to_path_buf(),
+    })
   }
 
   pub fn create_empty(root: &Path) -> Result<Self> {

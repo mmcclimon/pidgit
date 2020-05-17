@@ -13,6 +13,6 @@ fn main() {
   let res = pidgit::cmd::dispatch(&matches);
 
   if let Err(err) = res {
-    eprintln!("{}", err);
+    eprintln!("fatal: {}", err);
   }
 }
