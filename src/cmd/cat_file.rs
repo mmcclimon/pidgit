@@ -13,9 +13,11 @@ pub fn app<'a, 'b>() -> App<'a, 'b> {
 }
 
 pub fn run(matches: &ArgMatches) -> Result<()> {
-  let _repo = find_repo()?;
+  let repo = find_repo()?;
 
-  println!("{:#?}", matches);
+  let obj = repo.object_for_sha(matches.value_of("object").unwrap())?;
+
+  println!("got object {:#?}", obj);
 
   Ok(())
 }

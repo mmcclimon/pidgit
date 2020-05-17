@@ -1,5 +1,6 @@
 pub mod cmd;
 mod errors;
+mod object;
 mod repo;
 
 pub use errors::{PidgitError, Result};
