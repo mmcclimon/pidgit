@@ -48,7 +48,6 @@ pub fn run(matches: &ArgMatches) -> Result<()> {
       Object::Commit(_, _) => "commit",
       Object::Tag(_, _) => "tag",
       Object::Tree(_, _) => "tree",
-      Object::Generic => "unknown type!",
       _ => unreachable!(),
     };
 
@@ -62,7 +61,6 @@ pub fn run(matches: &ArgMatches) -> Result<()> {
       Object::Commit(size, _) => size,
       Object::Tag(size, _) => size,
       Object::Tree(size, _) => size,
-      Object::Generic => 0,
       _ => unreachable!(),
     };
 
@@ -75,17 +73,54 @@ pub fn run(matches: &ArgMatches) -> Result<()> {
       Object::Blob(_, c) => c,
       Object::Commit(_, c) => c,
       Object::Tag(_, c) => c,
-      Object::Tree(_, c) => c,
-      Object::Generic => "unknown type!".to_string(),
+      Object::Tree(_, content) => {
+        // a tree is made of entries, where each entry entry is:
+        // mode filename NULL 20-bytes-of-sha
+
+        let mut mode_buf = vec![];
+        let mut filename_buf = vec![];
+        let mut sha_buf = vec![];
+
+        // there is definitely a better way to do this
+        let mut i = 0;
+        while i < content.len() {
+          // read mode/filename
+          while content[i] != b' ' {
+            mode_buf.push(content[i]);
+            i += 1;
+          }
+
+          while content[i] != b'\0' {
+            filename_buf.push(content[i]);
+            i += 1;
+          }
+
+          i += 1; // null
+          for _ in 0..20 {
+            sha_buf.push(content[i]);
+            i += 1;
+          }
+
+          // we have an entry!
+          let filename =
+            String::from_utf8(filename_buf.drain(..).collect::<Vec<_>>())?;
+          let mode = String::from_utf8(mode_buf.drain(..).collect::<Vec<_>>())?;
+          let sha = hex::encode(sha_buf.drain(..).collect::<Vec<_>>());
+
+          println!("{:0>6} {} {}", mode, sha, filename);
+        }
+
+        return Ok(());
+      },
       _ => unreachable!(),
     };
 
-    println!("{}", content);
+    println!("{:?}", String::from_utf8_lossy(&content));
+    return Ok(());
   }
 
   // this is silly behavior of git cat-file, but hey.
-  // println!("{}", matches.usage());
-  app().print_help().unwrap();
+  println!("{}", matches.usage());
 
   Ok(())
 }

@@ -2,12 +2,13 @@ use std::fmt;
 use std::io::Error as IoError;
 use std::num::ParseIntError;
 use std::str::Utf8Error;
+use std::string::FromUtf8Error;
 
 #[derive(Debug)]
 pub enum PidgitError {
   Generic(String),
   Io(IoError),
-  Encoding(Utf8Error),
+  Encoding(Box<dyn std::error::Error>),
   Internal(Box<dyn std::error::Error>),
 }
 
@@ -35,7 +36,13 @@ impl From<IoError> for PidgitError {
 
 impl From<Utf8Error> for PidgitError {
   fn from(err: Utf8Error) -> Self {
-    PE::Encoding(err)
+    PE::Encoding(Box::new(err))
+  }
+}
+
+impl From<FromUtf8Error> for PidgitError {
+  fn from(err: FromUtf8Error) -> Self {
+    PE::Encoding(Box::new(err))
   }
 }
 

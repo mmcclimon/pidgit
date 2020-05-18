@@ -12,11 +12,10 @@ use crate::Result;
 // object types should consume a trait.
 #[derive(Debug)]
 pub enum Object {
-  Generic,
-  Blob(u32, String),
-  Commit(u32, String),
-  Tag(u32, String),
-  Tree(u32, String),
+  Blob(u32, Vec<u8>),
+  Commit(u32, Vec<u8>),
+  Tag(u32, Vec<u8>),
+  Tree(u32, Vec<u8>),
   NotFound,
 }
 
@@ -44,18 +43,15 @@ impl Object {
     let string_type = bits[0];
     let size: u32 = bits[1].parse()?;
 
-    let mut content = String::new();
-    zfile.read_to_string(&mut content)?;
+    let mut content = vec![];
+    zfile.read_to_end(&mut content)?;
 
     let kind = match string_type {
       "commit" => Self::Commit(size, content),
       "tag" => Self::Tag(size, content),
       "tree" => Self::Tree(size, content),
       "blob" => Self::Blob(size, content),
-      _ => {
-        eprintln!("weird object type! {}", bits[0]);
-        Self::Generic
-      },
+      _ => unreachable!(),
     };
 
     Ok(kind)
