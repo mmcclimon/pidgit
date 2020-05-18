@@ -4,6 +4,7 @@ mod object;
 mod repo;
 
 pub use errors::{PidgitError, Result};
+pub use object::Object;
 pub use repo::Repository;
 
 pub fn find_repo() -> Result<Repository> {

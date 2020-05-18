@@ -98,8 +98,6 @@ impl Repository {
       .gitdir
       .join(format!("objects/{}/{}", &sha[0..2], &sha[2..]));
 
-    let obj = Object::from_path(&path);
-
-    Ok(obj)
+    Object::from_path(&path)
   }
 }
