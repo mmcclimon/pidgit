@@ -7,13 +7,16 @@ use std::path::Path;
 use crate::Result;
 
 // object is a pretty generic name, but hey
+// TODO: storing these as strings is naive, because blobs can contain arbitrary
+// data. Also, Generic and NotFound should go away, and probably all of these
+// object types should consume a trait.
 #[derive(Debug)]
 pub enum Object {
   Generic,
-  Blob(u32),
-  Commit(u32),
-  Tag(u32),
-  Tree(u32),
+  Blob(u32, String),
+  Commit(u32, String),
+  Tag(u32, String),
+  Tree(u32, String),
   NotFound,
 }
 
@@ -41,11 +44,14 @@ impl Object {
     let string_type = bits[0];
     let size: u32 = bits[1].parse()?;
 
+    let mut content = String::new();
+    zfile.read_to_string(&mut content)?;
+
     let kind = match string_type {
-      "commit" => Self::Commit(size),
-      "tag" => Self::Tag(size),
-      "tree" => Self::Tree(size),
-      "blob" => Self::Blob(size),
+      "commit" => Self::Commit(size, content),
+      "tag" => Self::Tag(size, content),
+      "tree" => Self::Tree(size, content),
+      "blob" => Self::Blob(size, content),
       _ => {
         eprintln!("weird object type! {}", bits[0]);
         Self::Generic

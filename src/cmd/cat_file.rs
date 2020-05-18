@@ -20,6 +20,12 @@ pub fn app<'a, 'b>() -> App<'a, 'b> {
         .help("show object's size, instead of its content"),
     )
     .arg(
+      Arg::with_name("pretty")
+        .short("p")
+        .long("pretty")
+        .help("pretty-print object's content"),
+    )
+    .arg(
       Arg::with_name("object")
         .required(true)
         .help("object to view"),
@@ -38,10 +44,10 @@ pub fn run(matches: &ArgMatches) -> Result<()> {
 
   if matches.is_present("type") {
     let s = match obj {
-      Object::Blob(_) => "blob",
-      Object::Commit(_) => "commit",
-      Object::Tag(_) => "tag",
-      Object::Tree(_) => "tree",
+      Object::Blob(_, _) => "blob",
+      Object::Commit(_, _) => "commit",
+      Object::Tag(_, _) => "tag",
+      Object::Tree(_, _) => "tree",
       Object::Generic => "unknown type!",
       _ => unreachable!(),
     };
@@ -52,10 +58,10 @@ pub fn run(matches: &ArgMatches) -> Result<()> {
 
   if matches.is_present("size") {
     let size = match obj {
-      Object::Blob(size) => size,
-      Object::Commit(size) => size,
-      Object::Tag(size) => size,
-      Object::Tree(size) => size,
+      Object::Blob(size, _) => size,
+      Object::Commit(size, _) => size,
+      Object::Tag(size, _) => size,
+      Object::Tree(size, _) => size,
       Object::Generic => 0,
       _ => unreachable!(),
     };
@@ -64,7 +70,22 @@ pub fn run(matches: &ArgMatches) -> Result<()> {
     return Ok(());
   }
 
-  println!("got object {:?}", obj);
+  if matches.is_present("pretty") {
+    let content = match obj {
+      Object::Blob(_, c) => c,
+      Object::Commit(_, c) => c,
+      Object::Tag(_, c) => c,
+      Object::Tree(_, c) => c,
+      Object::Generic => "unknown type!".to_string(),
+      _ => unreachable!(),
+    };
+
+    println!("{}", content);
+  }
+
+  // this is silly behavior of git cat-file, but hey.
+  // println!("{}", matches.usage());
+  app().print_help().unwrap();
 
   Ok(())
 }
