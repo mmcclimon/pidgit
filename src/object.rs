@@ -1,4 +1,4 @@
-use flate2::bufread::ZlibDecoder;
+use flate2::read::ZlibDecoder;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
@@ -11,27 +11,30 @@ use crate::{PidgitError, Result};
 // data. Also, all of these object types should consume a trait.
 #[derive(Debug)]
 pub enum Object {
-  Blob(u32, Vec<u8>),
-  Commit(u32, Vec<u8>),
-  Tag(u32, Vec<u8>),
-  Tree(u32, Vec<u8>),
+  Blob(RawObject),
+  Commit(RawObject),
+  Tag(RawObject),
+  Tree(RawObject),
+}
+
+#[derive(Debug)]
+pub struct RawObject {
+  pub sha:    String,
+  pub size:   u32,   // in bytes
+  pub offset: usize, // position of first char after null
+  reader:     BufReader<ZlibDecoder<File>>,
 }
 
 impl Object {
   pub fn from_path(path: &Path) -> Result<Self> {
-    if !path.is_file() {
-      let hunks = path
-        .components()
-        .map(|c| c.as_os_str().to_string_lossy())
-        .collect::<Vec<_>>();
+    let sha = sha_from_path(&path);
 
-      let l = hunks.len();
-      let sha = format!("{}{}", hunks[l - 2], hunks[l - 1]);
+    if !path.is_file() {
       return Err(PidgitError::ObjectNotFound(sha));
     }
 
     let f = File::open(path)?;
-    let mut zfile = BufReader::new(ZlibDecoder::new(BufReader::new(f)));
+    let mut zfile = BufReader::new(ZlibDecoder::new(f));
 
     let mut buf = vec![];
     zfile.read_until(b'\0', &mut buf)?;
@@ -43,17 +46,52 @@ impl Object {
     let string_type = bits[0];
     let size: u32 = bits[1].parse()?;
 
-    let mut content = vec![];
-    zfile.read_to_end(&mut content)?;
+    let object = RawObject {
+      sha,
+      size,
+      reader: zfile,
+      offset: buf.len(),
+    };
+
+    // let mut content = vec![];
+    // zfile.read_to_end(&mut content)?;
 
     let kind = match string_type {
-      "commit" => Self::Commit(size, content),
-      "tag" => Self::Tag(size, content),
-      "tree" => Self::Tree(size, content),
-      "blob" => Self::Blob(size, content),
+      "commit" => Self::Commit(object),
+      "tag" => Self::Tag(object),
+      "tree" => Self::Tree(object),
+      "blob" => Self::Blob(object),
       _ => unreachable!(),
     };
 
     Ok(kind)
   }
+
+  pub fn get_ref(&self) -> &RawObject {
+    match self {
+      Self::Blob(raw) => raw,
+      Self::Commit(raw) => raw,
+      Self::Tag(raw) => raw,
+      Self::Tree(raw) => raw,
+    }
+  }
+
+  pub fn string_type(&self) -> &'static str {
+    match self {
+      Self::Blob(_) => "blob",
+      Self::Commit(_) => "commit",
+      Self::Tag(_) => "tag",
+      Self::Tree(_) => "tree",
+    }
+  }
+}
+
+fn sha_from_path(path: &Path) -> String {
+  let hunks = path
+    .components()
+    .map(|c| c.as_os_str().to_string_lossy())
+    .collect::<Vec<_>>();
+
+  let l = hunks.len();
+  format!("{}{}", hunks[l - 2], hunks[l - 1])
 }
