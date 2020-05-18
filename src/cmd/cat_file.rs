@@ -93,9 +93,19 @@ pub fn run(matches: &ArgMatches) -> Result<()> {
           let mut sha = [0u8; 20];
           reader.read_exact(&mut sha)?;
 
+          let mode_str = format!("{:0>6}", String::from_utf8(mode)?);
+
+          let entry_type = match &mode_str[..3] {
+            "040" => "tree",
+            "100" => "blob",
+            "120" => "blob", // symlink
+            _ => "????",
+          };
+
           println!(
-            "{:0>6} {}    {}",
-            String::from_utf8(mode)?,
+            "{} {} {}    {}",
+            mode_str,
+            entry_type,
             hex::encode(sha),
             String::from_utf8(filename)?,
           );
