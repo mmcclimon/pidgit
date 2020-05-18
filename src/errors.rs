@@ -10,6 +10,7 @@ pub enum PidgitError {
   Io(IoError),
   Encoding(Box<dyn std::error::Error>),
   Internal(Box<dyn std::error::Error>),
+  ObjectNotFound(String),
 }
 
 type PE = PidgitError;
@@ -24,6 +25,7 @@ impl fmt::Display for PidgitError {
       PE::Generic(err) => write!(f, "{}", err),
       PE::Encoding(err) => write!(f, "{}", err),
       PE::Internal(err) => write!(f, "weird error: {}", err),
+      PE::ObjectNotFound(sha) => write!(f, "object not found: {}", sha),
     }
   }
 }

@@ -39,18 +39,12 @@ pub fn run(matches: &ArgMatches) -> Result<()> {
 
   let obj = repo.object_for_sha(matches.value_of("object").unwrap())?;
 
-  if let Object::NotFound = obj {
-    println!("object not found!");
-    return Ok(());
-  }
-
   if matches.is_present("type") {
     let s = match obj {
       Object::Blob(_, _) => "blob",
       Object::Commit(_, _) => "commit",
       Object::Tag(_, _) => "tag",
       Object::Tree(_, _) => "tree",
-      _ => unreachable!(),
     };
 
     println!("{}", s);
@@ -63,7 +57,6 @@ pub fn run(matches: &ArgMatches) -> Result<()> {
       Object::Commit(size, _) => size,
       Object::Tag(size, _) => size,
       Object::Tree(size, _) => size,
-      _ => unreachable!(),
     };
 
     println!("{}", size);
@@ -113,7 +106,6 @@ pub fn run(matches: &ArgMatches) -> Result<()> {
 
         return Ok(());
       },
-      _ => unreachable!(),
     };
 
     println!("{:?}", String::from_utf8_lossy(&content));

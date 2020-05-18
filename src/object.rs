@@ -4,37 +4,37 @@ use std::io::prelude::*;
 use std::io::BufReader;
 use std::path::Path;
 
-use crate::Result;
+use crate::{PidgitError, Result};
 
 // object is a pretty generic name, but hey
 // TODO: storing these as strings is naive, because blobs can contain arbitrary
-// data. Also, Generic and NotFound should go away, and probably all of these
-// object types should consume a trait.
+// data. Also, all of these object types should consume a trait.
 #[derive(Debug)]
 pub enum Object {
   Blob(u32, Vec<u8>),
   Commit(u32, Vec<u8>),
   Tag(u32, Vec<u8>),
   Tree(u32, Vec<u8>),
-  NotFound,
 }
 
 impl Object {
   pub fn from_path(path: &Path) -> Result<Self> {
     if !path.is_file() {
-      return Ok(Self::NotFound);
+      let hunks = path
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy())
+        .collect::<Vec<_>>();
+
+      let l = hunks.len();
+      let sha = format!("{}{}", hunks[l - 2], hunks[l - 1]);
+      return Err(PidgitError::ObjectNotFound(sha));
     }
 
     let f = File::open(path)?;
     let mut zfile = BufReader::new(ZlibDecoder::new(BufReader::new(f)));
 
     let mut buf = vec![];
-    let num_bytes = zfile.read_until(b'\0', &mut buf)?;
-
-    if num_bytes == 0 {
-      eprintln!("could not read bytes from file? {}", path.display());
-      return Ok(Self::NotFound);
-    }
+    zfile.read_until(b'\0', &mut buf)?;
 
     // ignore null terminator
     let s = std::str::from_utf8(&buf[0..buf.len() - 1])?;
