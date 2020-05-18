@@ -1,4 +1,6 @@
 use clap::{App, Arg, ArgMatches};
+use std::io::prelude::*;
+use std::io::Cursor;
 
 use crate::{find_repo, Object, Result};
 
@@ -76,38 +78,27 @@ pub fn run(matches: &ArgMatches) -> Result<()> {
       Object::Tree(_, content) => {
         // a tree is made of entries, where each entry entry is:
         // mode filename NULL 20-bytes-of-sha
+        let mut reader = Cursor::new(&content);
+        let len = reader.get_ref().len();
 
-        let mut mode_buf = vec![];
-        let mut filename_buf = vec![];
-        let mut sha_buf = vec![];
+        while (reader.position() as usize) < len {
+          let mut mode = vec![];
+          reader.read_until(b' ', &mut mode)?;
+          mode.pop();
 
-        // there is definitely a better way to do this
-        let mut i = 0;
-        while i < content.len() {
-          // read mode/filename
-          while content[i] != b' ' {
-            mode_buf.push(content[i]);
-            i += 1;
-          }
+          let mut filename = vec![];
+          reader.read_until(b'\0', &mut filename)?;
+          filename.pop();
 
-          while content[i] != b'\0' {
-            filename_buf.push(content[i]);
-            i += 1;
-          }
+          let mut sha = [0u8; 20];
+          reader.read_exact(&mut sha)?;
 
-          i += 1; // null
-          for _ in 0..20 {
-            sha_buf.push(content[i]);
-            i += 1;
-          }
-
-          // we have an entry!
-          let filename =
-            String::from_utf8(filename_buf.drain(..).collect::<Vec<_>>())?;
-          let mode = String::from_utf8(mode_buf.drain(..).collect::<Vec<_>>())?;
-          let sha = hex::encode(sha_buf.drain(..).collect::<Vec<_>>());
-
-          println!("{:0>6} {} {}", mode, sha, filename);
+          println!(
+            "{:0>6} {}    {}",
+            String::from_utf8(mode)?,
+            hex::encode(sha),
+            String::from_utf8(filename)?,
+          );
         }
 
         return Ok(());
