@@ -4,7 +4,17 @@ use crate::Result;
 #[derive(Debug)]
 pub struct Tree {
   raw:     RawObject,
-  content: Vec<u8>,
+  entries: Vec<TreeEntry>,
+}
+
+// I would like these to be &str, which I think could work, but I need to work
+// out the lifetimes.
+#[derive(Debug)]
+pub struct TreeEntry {
+  mode: String,
+  name: String,
+  sha:  String,
+  kind: String,
 }
 
 impl GitObject for Tree {
@@ -13,29 +23,44 @@ impl GitObject for Tree {
   }
 
   fn pretty(&self) -> Result<String> {
+    Ok(
+      self
+        .entries
+        .iter()
+        .map(|e| format!("{} {} {}    {}", e.mode, e.kind, e.sha, e.name,))
+        .collect::<Vec<_>>()
+        .join("\n"),
+    )
+  }
+}
+
+impl Tree {
+  pub fn from_raw(raw: RawObject) -> Self {
     use std::io::prelude::*;
     use std::io::Cursor;
 
+    let err = "malformed tree entry";
+
     // a tree is made of entries, where each entry entry is:
     // mode filename NULL 20-bytes-of-sha
-    let mut reader = Cursor::new(&self.raw.content);
-    let len = reader.get_ref().len();
+    let mut entries = vec![];
 
-    let mut out = String::new();
+    let mut reader = Cursor::new(&raw.content);
+    let len = reader.get_ref().len();
 
     while (reader.position() as usize) < len {
       let mut mode = vec![];
-      reader.read_until(b' ', &mut mode)?;
+      reader.read_until(b' ', &mut mode).expect(err);
       mode.pop();
 
       let mut filename = vec![];
-      reader.read_until(b'\0', &mut filename)?;
+      reader.read_until(b'\0', &mut filename).expect(err);
       filename.pop();
 
       let mut sha = [0u8; 20];
-      reader.read_exact(&mut sha)?;
+      reader.read_exact(&mut sha).expect(err);
 
-      let mode_str = format!("{:0>6}", String::from_utf8(mode)?);
+      let mode_str = format!("{:0>6}", String::from_utf8(mode).expect(err));
 
       let entry_type = match &mode_str[..3] {
         "040" => "tree",
@@ -44,26 +69,14 @@ impl GitObject for Tree {
         _ => "????",
       };
 
-      out.push_str(&format!(
-        "{} {} {}    {}\n",
-        mode_str,
-        entry_type,
-        hex::encode(sha),
-        String::from_utf8(filename)?,
-      ));
+      entries.push(TreeEntry {
+        mode: mode_str,
+        kind: entry_type.to_string(),
+        name: String::from_utf8_lossy(&filename).to_string(), // improve me
+        sha:  hex::encode(sha),
+      });
     }
 
-    out.pop();
-
-    return Ok(out);
-  }
-}
-
-impl Tree {
-  pub fn from_raw(raw: RawObject) -> Self {
-    Self {
-      raw,
-      content: vec![],
-    }
+    Self { raw, entries }
   }
 }
