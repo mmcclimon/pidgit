@@ -17,8 +17,6 @@ pub use tag::Tag;
 pub use tree::Tree;
 
 // object is a pretty generic name, but hey
-// TODO: storing these as strings is naive, because blobs can contain arbitrary
-// data. Also, all of these object types should consume a trait.
 #[derive(Debug)]
 pub enum Object {
   Blob(RawObject),
@@ -42,11 +40,8 @@ pub trait GitObject {
   }
 
   // default, should be better
-  fn pretty(&self) -> Result<String> {
-    Ok(format!(
-      "{}",
-      String::from_utf8_lossy(&self.get_ref().content)
-    ))
+  fn pretty(&self) -> Vec<u8> {
+    self.get_ref().content.to_vec()
   }
 }
 

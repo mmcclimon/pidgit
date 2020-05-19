@@ -22,15 +22,15 @@ impl GitObject for Tree {
     &self.raw
   }
 
-  fn pretty(&self) -> Result<String> {
-    Ok(
-      self
-        .entries
-        .iter()
-        .map(|e| format!("{} {} {}    {}", e.mode, e.kind, e.sha, e.name,))
-        .collect::<Vec<_>>()
-        .join("\n"),
-    )
+  fn pretty(&self) -> Vec<u8> {
+    self
+      .entries
+      .iter()
+      .map(|e| format!("{} {} {}    {}", e.mode, e.kind, e.sha, e.name,))
+      .collect::<Vec<_>>()
+      .join("\n")
+      .as_bytes()
+      .to_vec()
   }
 }
 
