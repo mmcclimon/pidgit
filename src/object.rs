@@ -6,6 +6,16 @@ use std::path::Path;
 
 use crate::{PidgitError, Result};
 
+mod blob;
+mod commit;
+mod tag;
+mod tree;
+
+pub use blob::Blob;
+pub use commit::Commit;
+pub use tag::Tag;
+pub use tree::Tree;
+
 // object is a pretty generic name, but hey
 // TODO: storing these as strings is naive, because blobs can contain arbitrary
 // data. Also, all of these object types should consume a trait.
@@ -19,10 +29,25 @@ pub enum Object {
 
 #[derive(Debug)]
 pub struct RawObject {
-  pub sha:    String,
-  pub size:   u32,   // in bytes
-  pub offset: usize, // position of first char after null
-  reader:     BufReader<ZlibDecoder<File>>,
+  pub sha:     String,
+  pub size:    u32, // in bytes
+  pub content: Vec<u8>,
+}
+
+pub trait GitObject {
+  fn get_ref(&self) -> &RawObject;
+
+  fn size(&self) -> u32 {
+    self.get_ref().size
+  }
+
+  // default, should be better
+  fn pretty(&self) -> Result<String> {
+    Ok(format!(
+      "{}",
+      String::from_utf8_lossy(&self.get_ref().content)
+    ))
+  }
 }
 
 impl Object {
@@ -46,21 +71,18 @@ impl Object {
     let string_type = bits[0];
     let size: u32 = bits[1].parse()?;
 
-    let object = RawObject {
-      sha,
-      size,
-      reader: zfile,
-      offset: buf.len(),
-    };
+    // We could be smarter and not eagerly read objects into memory, but I think
+    // this is fine for now.
+    let mut content = vec![];
+    zfile.read_to_end(&mut content)?;
 
-    // let mut content = vec![];
-    // zfile.read_to_end(&mut content)?;
+    let raw = RawObject { sha, size, content };
 
     let kind = match string_type {
-      "commit" => Self::Commit(object),
-      "tag" => Self::Tag(object),
-      "tree" => Self::Tree(object),
-      "blob" => Self::Blob(object),
+      "commit" => Self::Commit(raw),
+      "tag" => Self::Tag(raw),
+      "tree" => Self::Tree(raw),
+      "blob" => Self::Blob(raw),
       _ => unreachable!(),
     };
 
@@ -76,12 +98,26 @@ impl Object {
     }
   }
 
+  pub fn size(&self) -> u32 {
+    self.get_ref().size
+  }
+
   pub fn string_type(&self) -> &'static str {
     match self {
       Self::Blob(_) => "blob",
       Self::Commit(_) => "commit",
       Self::Tag(_) => "tag",
       Self::Tree(_) => "tree",
+    }
+  }
+
+  // consume self, turning into a GitObject
+  pub fn inflate(self) -> Box<dyn GitObject> {
+    match self {
+      Self::Blob(raw) => Box::new(Blob::from_raw(raw)),
+      Self::Commit(raw) => Box::new(Commit::from_raw(raw)),
+      Self::Tag(raw) => Box::new(Tag::from_raw(raw)),
+      Self::Tree(raw) => Box::new(Tree::from_raw(raw)),
     }
   }
 }
