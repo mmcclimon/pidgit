@@ -94,10 +94,12 @@ impl Repository {
       )));
     }
 
-    let path = self
-      .gitdir
-      .join(format!("objects/{}/{}", &sha[0..2], &sha[2..]));
+    RawObject::from_path(&self.path_for_sha(sha))
+  }
 
-    RawObject::from_path(&path)
+  pub fn path_for_sha(&self, sha: &str) -> PathBuf {
+    self
+      .gitdir
+      .join(format!("objects/{}/{}", &sha[0..2], &sha[2..]))
   }
 }
