@@ -1,5 +1,4 @@
 use crate::object::{GitObject, RawObject};
-use crate::Result;
 
 #[derive(Debug)]
 pub struct Tree {

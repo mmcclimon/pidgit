@@ -1,10 +1,10 @@
-use flate2::read::ZlibDecoder;
+use flate2::{read::ZlibDecoder, write::ZlibEncoder, Compression};
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
 use std::path::Path;
 
-use crate::{PidgitError, Result};
+use crate::{util, PidgitError, Result};
 
 mod blob;
 mod commit;
@@ -47,7 +47,7 @@ pub trait GitObject {
 
 impl Object {
   pub fn from_path(path: &Path) -> Result<Self> {
-    let sha = sha_from_path(&path);
+    let sha = util::sha_from_path(&path);
 
     if !path.is_file() {
       return Err(PidgitError::ObjectNotFound(sha));
@@ -117,12 +117,19 @@ impl Object {
   }
 }
 
-fn sha_from_path(path: &Path) -> String {
-  let hunks = path
-    .components()
-    .map(|c| c.as_os_str().to_string_lossy())
-    .collect::<Vec<_>>();
+impl RawObject {
+  // dunno about this, but ok
+  pub fn from_content(kind: &str, content: Vec<u8>) -> Result<Self> {
+    let sha = util::hash_object(kind, &content);
 
-  let l = hunks.len();
-  format!("{}{}", hunks[l - 2], hunks[l - 1])
+    // we'll use this later, when we actually write into the repo
+    let mut e = ZlibEncoder::new(Vec::new(), Compression::default());
+    e.write_all(&content)?;
+    let _compressed = e.finish()?;
+
+    // eprintln!("{:x?}", [header, compressed].concat());
+
+    let size = content.len() as u32;
+    Ok(RawObject { sha, size, content })
+  }
 }

@@ -2,6 +2,7 @@ pub mod cmd;
 mod errors;
 mod object;
 mod repo;
+mod util;
 
 pub use errors::{PidgitError, Result};
 pub use object::Object;
