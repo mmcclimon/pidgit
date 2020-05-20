@@ -4,7 +4,8 @@ use std::io::prelude::*;
 use std::io::BufReader;
 use std::path::PathBuf;
 
-use crate::{util, Object, PidgitError, Result};
+use crate::object::RawObject;
+use crate::{find_repo, Object, PidgitError, Result};
 
 pub fn app<'a, 'b>() -> App<'a, 'b> {
   App::new("hash-object")
@@ -16,13 +17,22 @@ pub fn app<'a, 'b>() -> App<'a, 'b> {
         .default_value("blob")
         .help("specify the object type"),
     )
+    .arg(
+      Arg::with_name("write")
+        .short("w")
+        .long("write")
+        .help("write the object into the object database"),
+    )
     .arg(Arg::with_name("path").required(true).help("path to hash"))
 }
 
 pub fn run(matches: &ArgMatches) -> Result<()> {
-  // I don't think we even _need_ the repository? Well, at least until we
-  // implement -w.
-  // let repo = find_repo()?;
+  let repo = find_repo();
+
+  if repo.is_err() && matches.is_present("write") {
+    return repo.map(|_| ());
+  }
+
   let path = PathBuf::from(matches.value_of("path").unwrap());
 
   if !path.exists() {
@@ -44,8 +54,13 @@ pub fn run(matches: &ArgMatches) -> Result<()> {
   let mut reader = BufReader::new(File::open(&path)?);
   reader.read_to_end(&mut content)?;
 
-  let sha = util::hash_object(&Object::Blob, &content);
-  println!("{}", sha.hexdigest());
+  let obj = RawObject::from_content(Object::Blob, content)?;
+
+  println!("{}", obj.sha().hexdigest());
+
+  if matches.is_present("write") {
+    repo.unwrap().write_object(&obj)?;
+  }
 
   Ok(())
 }

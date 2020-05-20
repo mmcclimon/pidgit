@@ -1,4 +1,4 @@
-use flate2::{read::ZlibDecoder, write::ZlibEncoder, Compression};
+use flate2::read::ZlibDecoder;
 use sha1::Sha1;
 use std::fs::File;
 use std::io::prelude::*;
@@ -50,9 +50,10 @@ impl Object {
 
 #[derive(Debug)]
 pub struct RawObject {
-  pub kind:    Object,
-  pub size:    u32, // in bytes
-  pub content: Vec<u8>,
+  kind:    Object,
+  size:    u32, // in bytes
+  content: Vec<u8>,
+  header:  Vec<u8>,
 }
 
 pub trait GitObject {
@@ -95,11 +96,13 @@ impl RawObject {
     zfile.read_to_end(&mut content)?;
 
     let kind = Object::from_str(string_type);
+    let header = util::header_for(&kind, &content);
 
     Ok(RawObject {
       kind,
       size,
       content,
+      header,
     })
   }
 
@@ -111,8 +114,19 @@ impl RawObject {
     &self.kind
   }
 
+  pub fn content(&self) -> &[u8] {
+    &self.content
+  }
+
   pub fn sha(&self) -> Sha1 {
-    util::hash_object(self.kind(), &self.content)
+    let mut sha = Sha1::new();
+    sha.update(&self.header());
+    sha.update(&self.content);
+    sha
+  }
+
+  pub fn header(&self) -> Vec<u8> {
+    util::header_for(&self.kind, &self.content)
   }
 
   // consume self, turning into a GitObject
@@ -127,17 +141,13 @@ impl RawObject {
 
   // dunno about this, but ok
   pub fn from_content(kind: Object, content: Vec<u8>) -> Result<Self> {
-    // we'll use this later, when we actually write into the repo
-    let mut e = ZlibEncoder::new(Vec::new(), Compression::default());
-    e.write_all(&content)?;
-    let _compressed = e.finish()?;
-
-    // eprintln!("{:x?}", [header, compressed].concat());
+    let header = util::header_for(&kind, &content);
 
     Ok(RawObject {
       kind,
       size: content.len() as u32,
       content,
+      header,
     })
   }
 }

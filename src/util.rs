@@ -1,4 +1,3 @@
-use sha1::Sha1;
 use std::path::Path;
 
 use crate::Object;
@@ -15,11 +14,8 @@ pub fn sha_from_path(path: &Path) -> String {
   format!("{}{}", hunks[l - 2], hunks[l - 1])
 }
 
-/// Given an object type ("commit") and a slice of bytes (the content), return
-/// the 40-char sha as a string.
-pub fn hash_object(kind: &Object, content: &[u8]) -> Sha1 {
-  let mut sha = Sha1::new();
-  sha.update(format!("{} {}\0", kind.as_str(), content.len()).as_bytes());
-  sha.update(&content);
-  sha
+pub fn header_for(kind: &Object, content: &[u8]) -> Vec<u8> {
+  format!("{} {}\0", kind.as_str(), content.len())
+    .as_bytes()
+    .to_vec()
 }

@@ -1,4 +1,6 @@
+use flate2::{write::ZlibEncoder, Compression};
 use std::fs::{DirBuilder, File};
+use std::io::prelude::*;
 use std::path::{Path, PathBuf};
 
 use crate::object::RawObject;
@@ -97,9 +99,27 @@ impl Repository {
     RawObject::from_path(&self.path_for_sha(sha))
   }
 
+  // NB returns an absolute path!
   pub fn path_for_sha(&self, sha: &str) -> PathBuf {
     self
       .gitdir
       .join(format!("objects/{}/{}", &sha[0..2], &sha[2..]))
+  }
+
+  pub fn write_object(&self, obj: &RawObject) -> Result<()> {
+    let path = self.path_for_sha(&obj.sha().hexdigest());
+
+    // create parent dir!
+    std::fs::create_dir_all(path.parent().unwrap())?;
+
+    let file = File::create(path)?;
+
+    let mut e = ZlibEncoder::new(file, Compression::default());
+
+    e.write_all(&obj.header())?;
+    e.write_all(&obj.content())?;
+    e.finish()?;
+
+    Ok(())
   }
 }
