@@ -45,7 +45,7 @@ pub fn run(matches: &ArgMatches) -> Result<()> {
   reader.read_to_end(&mut content)?;
 
   let sha = util::hash_object(&Object::Blob, &content);
-  println!("{}", sha);
+  println!("{}", sha.hexdigest());
 
   Ok(())
 }

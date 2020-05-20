@@ -1,4 +1,5 @@
 use flate2::{read::ZlibDecoder, write::ZlibEncoder, Compression};
+use sha1::Sha1;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
@@ -50,7 +51,6 @@ impl Object {
 #[derive(Debug)]
 pub struct RawObject {
   pub kind:    Object,
-  pub sha:     String,
   pub size:    u32, // in bytes
   pub content: Vec<u8>,
 }
@@ -98,7 +98,6 @@ impl RawObject {
 
     Ok(RawObject {
       kind,
-      sha,
       size,
       content,
     })
@@ -110,6 +109,10 @@ impl RawObject {
 
   pub fn kind(&self) -> &Object {
     &self.kind
+  }
+
+  pub fn sha(&self) -> Sha1 {
+    util::hash_object(self.kind(), &self.content)
   }
 
   // consume self, turning into a GitObject
@@ -124,8 +127,6 @@ impl RawObject {
 
   // dunno about this, but ok
   pub fn from_content(kind: Object, content: Vec<u8>) -> Result<Self> {
-    let sha = util::hash_object(&kind, &content);
-
     // we'll use this later, when we actually write into the repo
     let mut e = ZlibEncoder::new(Vec::new(), Compression::default());
     e.write_all(&content)?;
@@ -133,11 +134,9 @@ impl RawObject {
 
     // eprintln!("{:x?}", [header, compressed].concat());
 
-    let size = content.len() as u32;
     Ok(RawObject {
       kind,
-      sha,
-      size,
+      size: content.len() as u32,
       content,
     })
   }

@@ -17,10 +17,9 @@ pub fn sha_from_path(path: &Path) -> String {
 
 /// Given an object type ("commit") and a slice of bytes (the content), return
 /// the 40-char sha as a string.
-pub fn hash_object(kind: &Object, content: &[u8]) -> String {
+pub fn hash_object(kind: &Object, content: &[u8]) -> Sha1 {
   let mut sha = Sha1::new();
   sha.update(format!("{} {}\0", kind.as_str(), content.len()).as_bytes());
   sha.update(&content);
-
-  sha.hexdigest()
+  sha
 }
