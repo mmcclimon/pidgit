@@ -81,9 +81,9 @@ impl RawObject {
 
     let mut buf = vec![];
     zfile.read_until(b'\0', &mut buf)?;
+    buf.pop(); // ignore null terminator
 
-    // ignore null terminator
-    let s = std::str::from_utf8(&buf[0..buf.len() - 1])?;
+    let s = std::str::from_utf8(&buf)?;
     let bits = s.split(" ").collect::<Vec<_>>();
 
     let string_type = bits[0];

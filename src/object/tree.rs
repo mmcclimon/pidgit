@@ -56,7 +56,7 @@ impl Tree {
       reader.read_until(b'\0', &mut filename).expect(err);
       filename.pop();
 
-      let mut sha = [0u8; 20];
+      let mut sha = [0u8; sha1::DIGEST_LENGTH];
       reader.read_exact(&mut sha).expect(err);
 
       let mode_str = format!("{:0>6}", String::from_utf8(mode).expect(err));
