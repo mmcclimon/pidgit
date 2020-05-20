@@ -39,14 +39,14 @@ pub fn run(m: &ArgMatches) -> Result<()> {
   let object = repo.object_for_sha(m.value_of("object").unwrap())?;
 
   match object {
-    _ if m.is_present("type") => println!("{}", object.string_type()),
+    _ if m.is_present("type") => println!("{}", object.kind().as_str()),
     _ if m.is_present("size") => println!("{}", object.size()),
     _ if m.is_present("pretty") => {
       let mut stdout = io::stdout();
       stdout.write_all(&object.inflate().pretty())?;
       stdout.write(b"\n")?;
     },
-    _ => println!("{} {}", object.string_type(), object.size()),
+    _ => println!("{} {}", object.kind().as_str(), object.size()),
   };
 
   Ok(())

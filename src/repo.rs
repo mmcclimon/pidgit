@@ -1,7 +1,7 @@
 use std::fs::{DirBuilder, File};
 use std::path::{Path, PathBuf};
 
-use crate::object::Object;
+use crate::object::RawObject;
 use crate::{PidgitError, Result};
 
 const GITDIR_NAME: &'static str = ".pidgit";
@@ -78,7 +78,7 @@ impl Repository {
       .map_err(|e| e.into())
   }
 
-  pub fn object_for_sha(&self, sha: &str) -> Result<Object> {
+  pub fn object_for_sha(&self, sha: &str) -> Result<RawObject> {
     // make this better, eventually
     if sha.len() != 40 {
       return Err(PidgitError::Generic(format!(
@@ -98,6 +98,6 @@ impl Repository {
       .gitdir
       .join(format!("objects/{}/{}", &sha[0..2], &sha[2..]));
 
-    Object::from_path(&path)
+    RawObject::from_path(&path)
   }
 }

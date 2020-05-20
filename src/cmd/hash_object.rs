@@ -4,7 +4,7 @@ use std::io::prelude::*;
 use std::io::BufReader;
 use std::path::PathBuf;
 
-use crate::{util, PidgitError, Result};
+use crate::{util, Object, PidgitError, Result};
 
 pub fn app<'a, 'b>() -> App<'a, 'b> {
   App::new("hash-object")
@@ -44,7 +44,7 @@ pub fn run(matches: &ArgMatches) -> Result<()> {
   let mut reader = BufReader::new(File::open(&path)?);
   reader.read_to_end(&mut content)?;
 
-  let sha = util::hash_object("blob", &content);
+  let sha = util::hash_object(&Object::Blob, &content);
   println!("{}", sha);
 
   Ok(())

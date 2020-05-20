@@ -18,15 +18,38 @@ pub use tree::Tree;
 
 // object is a pretty generic name, but hey
 #[derive(Debug)]
+#[allow(unused)]
 pub enum Object {
-  Blob(RawObject),
-  Commit(RawObject),
-  Tag(RawObject),
-  Tree(RawObject),
+  Blob,
+  Commit,
+  Tree,
+  Tag,
+}
+
+impl Object {
+  pub fn as_str(&self) -> &'static str {
+    match self {
+      Self::Blob => "blob",
+      Self::Commit => "commit",
+      Self::Tag => "tag",
+      Self::Tree => "tree",
+    }
+  }
+
+  pub fn from_str(s: &str) -> Self {
+    match s {
+      "blob" => Self::Blob,
+      "commit" => Self::Commit,
+      "tag" => Self::Tag,
+      "tree" => Self::Tree,
+      _ => panic!("unknown object type {}", s),
+    }
+  }
 }
 
 #[derive(Debug)]
 pub struct RawObject {
+  pub kind:    Object,
   pub sha:     String,
   pub size:    u32, // in bytes
   pub content: Vec<u8>,
@@ -45,7 +68,7 @@ pub trait GitObject {
   }
 }
 
-impl Object {
+impl RawObject {
   pub fn from_path(path: &Path) -> Result<Self> {
     let sha = util::sha_from_path(&path);
 
@@ -71,56 +94,37 @@ impl Object {
     let mut content = vec![];
     zfile.read_to_end(&mut content)?;
 
-    let raw = RawObject { sha, size, content };
+    let kind = Object::from_str(string_type);
 
-    let kind = match string_type {
-      "commit" => Self::Commit(raw),
-      "tag" => Self::Tag(raw),
-      "tree" => Self::Tree(raw),
-      "blob" => Self::Blob(raw),
-      _ => unreachable!(),
-    };
-
-    Ok(kind)
-  }
-
-  pub fn get_ref(&self) -> &RawObject {
-    match self {
-      Self::Blob(raw) => raw,
-      Self::Commit(raw) => raw,
-      Self::Tag(raw) => raw,
-      Self::Tree(raw) => raw,
-    }
+    Ok(RawObject {
+      kind,
+      sha,
+      size,
+      content,
+    })
   }
 
   pub fn size(&self) -> u32 {
-    self.get_ref().size
+    self.size
   }
 
-  pub fn string_type(&self) -> &'static str {
-    match self {
-      Self::Blob(_) => "blob",
-      Self::Commit(_) => "commit",
-      Self::Tag(_) => "tag",
-      Self::Tree(_) => "tree",
-    }
+  pub fn kind(&self) -> &Object {
+    &self.kind
   }
 
   // consume self, turning into a GitObject
   pub fn inflate(self) -> Box<dyn GitObject> {
-    match self {
-      Self::Blob(raw) => Box::new(Blob::from_raw(raw)),
-      Self::Commit(raw) => Box::new(Commit::from_raw(raw)),
-      Self::Tag(raw) => Box::new(Tag::from_raw(raw)),
-      Self::Tree(raw) => Box::new(Tree::from_raw(raw)),
+    match self.kind {
+      Object::Blob => Box::new(Blob::from_raw(self)),
+      Object::Commit => Box::new(Commit::from_raw(self)),
+      Object::Tag => Box::new(Tag::from_raw(self)),
+      Object::Tree => Box::new(Tree::from_raw(self)),
     }
   }
-}
 
-impl RawObject {
   // dunno about this, but ok
-  pub fn from_content(kind: &str, content: Vec<u8>) -> Result<Self> {
-    let sha = util::hash_object(kind, &content);
+  pub fn from_content(kind: Object, content: Vec<u8>) -> Result<Self> {
+    let sha = util::hash_object(&kind, &content);
 
     // we'll use this later, when we actually write into the repo
     let mut e = ZlibEncoder::new(Vec::new(), Compression::default());
@@ -130,6 +134,11 @@ impl RawObject {
     // eprintln!("{:x?}", [header, compressed].concat());
 
     let size = content.len() as u32;
-    Ok(RawObject { sha, size, content })
+    Ok(RawObject {
+      kind,
+      sha,
+      size,
+      content,
+    })
   }
 }
