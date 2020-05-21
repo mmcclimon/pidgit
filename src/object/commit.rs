@@ -1,3 +1,4 @@
+use chrono::{DateTime, FixedOffset};
 use std::io::prelude::*;
 use std::io::BufReader;
 
@@ -9,9 +10,10 @@ pub struct Commit {
   tree:           String,      // sha
   parents:        Vec<String>, // shas
   author:         Person,
-  author_date:    String,
+  author_date:    DateTime<FixedOffset>,
   committer:      Person,
-  committer_date: String,
+  committer_date: DateTime<FixedOffset>,
+  message:        String,
 }
 
 // I have no idea what to call this
@@ -24,10 +26,6 @@ pub struct Person {
 impl GitObject for Commit {
   fn get_ref(&self) -> &RawObject {
     &self.raw
-  }
-
-  fn pretty(&self) -> Vec<u8> {
-    vec![]
   }
 }
 
@@ -55,8 +53,6 @@ impl Commit {
     let mut parents = vec![];
 
     while (reader.position() as usize) < len {
-      // ok so.
-      // first line is the tree
       let mut line = String::new();
       reader.read_line(&mut line).unwrap();
       line.pop();
@@ -97,11 +93,12 @@ impl Commit {
       author_date: author_date.expect("did not find author"),
       committer: committer.expect("did not find committer"),
       committer_date: committer_date.expect("did not find committer date"),
+      message,
     }
   }
 }
 
-fn parse_author_line(line: &str) -> (Person, String) {
+fn parse_author_line(line: &str) -> (Person, DateTime<FixedOffset>) {
   // probably there's a better way to do this...
   let mut reader = BufReader::new(line.as_bytes());
 
@@ -116,10 +113,12 @@ fn parse_author_line(line: &str) -> (Person, String) {
   let mut date = String::new();
   reader.read_to_string(&mut date).unwrap();
 
+  let dt = DateTime::parse_from_str(date.trim(), "%s %z").unwrap();
+
   let person = Person {
     name:  String::from_utf8(name).unwrap().trim().to_string(),
     email: String::from_utf8(email).unwrap().trim().to_string(),
   };
 
-  (person, date.trim().to_string())
+  (person, dt)
 }
