@@ -21,6 +21,11 @@ pub fn app<'a, 'b>() -> App<'a, 'b> {
         .help("show object's size, instead of its content"),
     )
     .arg(
+      Arg::with_name("debug")
+        .long("debug")
+        .help("dump the object's data structure (for debugging rust internals)"),
+    )
+    .arg(
       Arg::with_name("pretty")
         .short("p")
         .long("pretty")
@@ -41,6 +46,7 @@ pub fn run(m: &ArgMatches) -> Result<()> {
   match object {
     _ if m.is_present("type") => println!("{}", object.kind().as_str()),
     _ if m.is_present("size") => println!("{}", object.size()),
+    _ if m.is_present("debug") => println!("{:#?}", object.inflate()),
     _ if m.is_present("pretty") => {
       let mut stdout = io::stdout();
       stdout.write_all(&object.inflate().pretty())?;
