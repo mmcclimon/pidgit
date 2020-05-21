@@ -1,5 +1,6 @@
 use flate2::read::ZlibDecoder;
 use sha1::Sha1;
+use std::fmt;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
@@ -48,7 +49,6 @@ impl Object {
   }
 }
 
-#[derive(Debug)]
 pub struct RawObject {
   kind:    Object,
   size:    u32, // in bytes
@@ -56,7 +56,18 @@ pub struct RawObject {
   header:  Vec<u8>,
 }
 
-pub trait GitObject {
+impl fmt::Debug for RawObject {
+  fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+    fmt
+      .debug_struct("RawObject")
+      .field("kind", &self.kind)
+      .field("size", &self.size)
+      .field("content", &"<raw data>")
+      .finish()
+  }
+}
+
+pub trait GitObject: std::fmt::Debug {
   fn get_ref(&self) -> &RawObject;
 
   fn size(&self) -> u32 {
@@ -125,8 +136,8 @@ impl RawObject {
     sha
   }
 
-  pub fn header(&self) -> Vec<u8> {
-    util::header_for(&self.kind, &self.content)
+  pub fn header(&self) -> &[u8] {
+    &self.header
   }
 
   // consume self, turning into a GitObject
