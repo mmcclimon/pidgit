@@ -3,17 +3,18 @@ use std::io::prelude::*;
 use std::io::BufReader;
 
 use crate::object::{GitObject, RawObject};
+use crate::Repository;
 
 #[derive(Debug)]
 pub struct Commit {
-  raw:            RawObject,
-  tree:           String,      // sha
-  parents:        Vec<String>, // shas
-  author:         Person,
-  author_date:    DateTime<FixedOffset>,
-  committer:      Person,
-  committer_date: DateTime<FixedOffset>,
-  message:        String,
+  raw:                RawObject,
+  pub tree:           String,      // sha
+  pub parent_shas:    Vec<String>, // shas
+  pub author:         Person,
+  pub author_date:    DateTime<FixedOffset>,
+  pub committer:      Person,
+  pub committer_date: DateTime<FixedOffset>,
+  pub message:        String,
 }
 
 // I have no idea what to call this
@@ -29,8 +30,11 @@ impl GitObject for Commit {
   }
 }
 
-impl Commit {
-  pub fn from_raw(raw: RawObject) -> Self {
+impl From<RawObject> for Commit {
+  // really, this should be TryFrom, because we unwrap() a bunch of io errors in
+  // here, but if we panic, it's only because there's something really weird
+  // going on and we couldn't recover anyway.
+  fn from(raw: RawObject) -> Self {
     use std::io::Cursor;
 
     // a commit has:
@@ -88,7 +92,7 @@ impl Commit {
     Self {
       raw,
       tree: tree.expect("did not find tree"),
-      parents: parents,
+      parent_shas: parents,
       author: author.expect("did not find author"),
       author_date: author_date.expect("did not find author"),
       committer: committer.expect("did not find committer"),
@@ -121,4 +125,25 @@ fn parse_author_line(line: &str) -> (Person, DateTime<FixedOffset>) {
   };
 
   (person, dt)
+}
+
+impl Commit {
+  // passing the repo here is bunk
+  pub fn parents(&self, repo: &Repository) -> Vec<Commit> {
+    self
+      .parent_shas
+      .iter()
+      .map(|sha| Self::from(repo.object_for_sha(sha).unwrap()))
+      .collect()
+  }
+
+  pub fn title(&self) -> &str {
+    let idx = self
+      .message
+      .find('\n')
+      .or_else(|| Some(self.message.len() as usize))
+      .unwrap();
+
+    &self.message[0..idx]
+  }
 }

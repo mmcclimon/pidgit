@@ -78,6 +78,10 @@ pub trait GitObject: std::fmt::Debug {
   fn pretty(&self) -> Vec<u8> {
     self.get_ref().content.to_vec()
   }
+
+  fn sha(&self) -> Sha1 {
+    self.get_ref().sha()
+  }
 }
 
 impl RawObject {
@@ -144,7 +148,7 @@ impl RawObject {
   pub fn inflate(self) -> Box<dyn GitObject> {
     match self.kind {
       Object::Blob => Box::new(Blob::from_raw(self)),
-      Object::Commit => Box::new(Commit::from_raw(self)),
+      Object::Commit => Box::new(Commit::from(self)),
       Object::Tag => Box::new(Tag::from_raw(self)),
       Object::Tree => Box::new(Tree::from_raw(self)),
     }

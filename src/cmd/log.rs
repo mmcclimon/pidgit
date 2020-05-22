@@ -1,5 +1,6 @@
 use clap::{App, Arg, ArgMatches};
 
+use crate::object::{Commit, GitObject};
 use crate::{find_repo, Result};
 
 pub fn app<'a, 'b>() -> App<'a, 'b> {
@@ -13,7 +14,18 @@ pub fn run(matches: &ArgMatches) -> Result<()> {
 
   let object = repo.object_for_sha(matches.value_of("sha").unwrap())?;
 
-  println!("{:#?}", object.inflate());
+  let mut c = Commit::from(object);
+
+  // this is terrible, but expedient
+  loop {
+    println!("{} {}", &c.sha().hexdigest()[0..8], c.title());
+    let mut parents = c.parents(&repo);
+    if let Some(parent) = parents.pop() {
+      c = parent;
+    } else {
+      break;
+    }
+  }
 
   Ok(())
 }
