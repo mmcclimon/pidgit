@@ -91,29 +91,13 @@ impl Repository {
   }
 
   pub fn object_for_sha(&self, sha: &str) -> Result<RawObject> {
-    // make this better, eventually
-    if sha.len() != 40 {
-      return Err(PidgitError::Generic(format!(
-        "malformed sha: {} is not 40 chars",
-        sha,
-      )));
-    }
-
-    if !sha.chars().all(|c| c.is_digit(16)) {
-      return Err(PidgitError::Generic(format!(
-        "malformed sha: {} contains non-hex characters",
-        sha,
-      )));
-    }
-
     RawObject::from_path(&self.path_for_sha(sha))
   }
 
   // NB returns an absolute path!
   pub fn path_for_sha(&self, sha: &str) -> PathBuf {
-    self
-      .gitdir
-      .join(format!("objects/{}/{}", &sha[0..2], &sha[2..]))
+    let (first, rest) = sha.split_at(2);
+    self.gitdir.join(format!("objects/{}/{}", first, rest))
   }
 
   pub fn write_object(&self, obj: &RawObject) -> Result<()> {
@@ -133,6 +117,14 @@ impl Repository {
     Ok(())
   }
 
+  pub fn resolve_object(&self, name: &str) -> Result<RawObject> {
+    match name {
+      "head" | "HEAD" | "@" => self.head(),
+      sha if sha.chars().all(|c| c.is_digit(16)) => self.resolve_sha(sha),
+      _ => Err(PidgitError::ObjectNotFound(name.to_string())),
+    }
+  }
+
   fn resolve_ref(&self, refstr: &str) -> Result<RawObject> {
     let raw = self.read_file(refstr)?;
 
@@ -148,10 +140,44 @@ impl Repository {
     self.resolve_ref("HEAD")
   }
 
-  pub fn resolve_object(&self, name: &str) -> Result<RawObject> {
-    match name {
-      "head" | "HEAD" | "@" => self.head(),
-      _ => Err(PidgitError::ObjectNotFound(name.to_string())),
+  fn resolve_sha(&self, sha: &str) -> Result<RawObject> {
+    if sha.len() < 4 {
+      return Err(PidgitError::Generic(format!(
+        "{} is too short to be a sha",
+        sha
+      )));
+    }
+
+    if sha.len() == 40 {
+      return self.object_for_sha(sha);
+    }
+
+    let not_found = Err(PidgitError::ObjectNotFound(sha.to_string()));
+
+    // we need to walk the objects dir
+    let (prefix, rest) = sha.split_at(2);
+    let base = self.gitdir.join(format!("objects/{}", &prefix));
+
+    if !base.is_dir() {
+      return not_found;
+    }
+
+    let paths = std::fs::read_dir(base)?
+      .filter(|e| e.is_ok())
+      .map(|e| e.unwrap().path())
+      .filter(|path| {
+        path
+          .file_name()
+          .unwrap()
+          .to_string_lossy()
+          .starts_with(&rest)
+      })
+      .collect::<Vec<_>>();
+
+    match paths.len() {
+      0 => not_found,
+      1 => RawObject::from_path(&paths[0]),
+      _ => Err(PidgitError::ObjectNotFound(format!("{} is ambiguous", sha))),
     }
   }
 }
