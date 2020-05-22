@@ -21,7 +21,7 @@ impl std::error::Error for PidgitError {}
 impl fmt::Display for PidgitError {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     match self {
-      PE::Io(err) => write!(f, "{}", err),
+      PE::Io(err) => write!(f, "{:?}", err),
       PE::Generic(err) => write!(f, "{}", err),
       PE::Encoding(err) => write!(f, "{}", err),
       PE::Internal(err) => write!(f, "weird error: {}", err),

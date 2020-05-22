@@ -51,7 +51,7 @@ impl Repository {
 
     Ok(Repository {
       work_tree: root.to_path_buf(),
-      gitdir:    gitdir,
+      gitdir,
     })
   }
 
@@ -78,6 +78,16 @@ impl Repository {
       .recursive(true)
       .create(self.gitdir.join(path))
       .map_err(|e| e.into())
+  }
+
+  // give it a path relative to .gitdir, read into a string
+  pub fn read_file<P>(&self, path: P) -> Result<String>
+  where
+    P: AsRef<Path> + std::fmt::Debug,
+  {
+    let mut s = String::new();
+    File::open(self.gitdir().join(path))?.read_to_string(&mut s)?;
+    Ok(s.trim().to_string())
   }
 
   pub fn object_for_sha(&self, sha: &str) -> Result<RawObject> {
@@ -121,5 +131,27 @@ impl Repository {
     e.finish()?;
 
     Ok(())
+  }
+
+  fn resolve_ref(&self, refstr: &str) -> Result<RawObject> {
+    let raw = self.read_file(refstr)?;
+
+    if raw.starts_with("ref: ") {
+      let symref = raw.trim_start_matches("ref: ");
+      self.resolve_ref(symref)
+    } else {
+      self.object_for_sha(&raw)
+    }
+  }
+
+  pub fn head(&self) -> Result<RawObject> {
+    self.resolve_ref("HEAD")
+  }
+
+  pub fn resolve_object(&self, name: &str) -> Result<RawObject> {
+    match name {
+      "head" | "HEAD" | "@" => self.head(),
+      _ => Err(PidgitError::ObjectNotFound(name.to_string())),
+    }
   }
 }
