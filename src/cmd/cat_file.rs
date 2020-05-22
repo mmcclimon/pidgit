@@ -41,7 +41,7 @@ pub fn app<'a, 'b>() -> App<'a, 'b> {
 pub fn run(m: &ArgMatches) -> Result<()> {
   let repo = find_repo()?;
 
-  let object = repo.object_for_sha(m.value_of("object").unwrap())?;
+  let object = repo.resolve_object(m.value_of("object").unwrap())?;
 
   match object {
     _ if m.is_present("type") => println!("{}", object.kind().as_str()),
