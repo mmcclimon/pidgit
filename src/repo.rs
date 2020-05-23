@@ -81,13 +81,20 @@ impl Repository {
   }
 
   // give it a path relative to .gitdir, read into a string
-  pub fn read_file<P>(&self, path: P) -> Result<String>
+  pub fn read_git_path<P>(&self, path: P) -> Result<String>
   where
     P: AsRef<Path> + std::fmt::Debug,
   {
     let mut s = String::new();
     File::open(self.gitdir().join(path))?.read_to_string(&mut s)?;
     Ok(s.trim().to_string())
+  }
+
+  fn git_path_exists<P>(&self, path: P) -> bool
+  where
+    P: AsRef<Path> + std::fmt::Debug,
+  {
+    self.gitdir().join(path).is_file()
   }
 
   pub fn object_for_sha(&self, sha: &str) -> Result<RawObject> {
@@ -118,15 +125,33 @@ impl Repository {
   }
 
   pub fn resolve_object(&self, name: &str) -> Result<RawObject> {
-    match name {
-      "head" | "HEAD" | "@" => self.head(),
-      sha if sha.chars().all(|c| c.is_digit(16)) => self.resolve_sha(sha),
-      _ => Err(PidgitError::ObjectNotFound(name.to_string())),
+    // this may get more smarts later
+    let to_match = match name {
+      "head" | "@" => "HEAD",
+      _ => name,
+    };
+
+    // this algorithm directly from git rev-parse docs
+    for prefix in &[".", "refs", "refs/tags", "refs/heads", "refs/remotes"] {
+      let joined = format!("{}/{}", prefix, to_match);
+
+      if self.git_path_exists(&joined) {
+        return self.resolve_ref(&joined);
+      }
     }
+
+    // also check head of remotes
+    let remote_head = format!("refs/remotes/{}/HEAD", to_match);
+    if self.git_path_exists(&remote_head) {
+      return self.resolve_ref(&remote_head);
+    }
+
+    // not found yet, assume a sha
+    self.resolve_sha(to_match)
   }
 
   fn resolve_ref(&self, refstr: &str) -> Result<RawObject> {
-    let raw = self.read_file(refstr)?;
+    let raw = self.read_git_path(refstr)?;
 
     if raw.starts_with("ref: ") {
       let symref = raw.trim_start_matches("ref: ");
@@ -142,7 +167,7 @@ impl Repository {
 
   fn resolve_sha(&self, sha: &str) -> Result<RawObject> {
     if sha.len() < 4 {
-      return Err(PidgitError::Generic(format!(
+      return Err(PidgitError::ObjectNotFound(format!(
         "{} is too short to be a sha",
         sha
       )));
