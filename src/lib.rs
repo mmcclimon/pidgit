@@ -1,5 +1,6 @@
 pub mod cmd;
 mod errors;
+mod index;
 mod object;
 mod repo;
 mod util;

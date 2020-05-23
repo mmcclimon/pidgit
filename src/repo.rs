@@ -3,6 +3,7 @@ use std::fs::{DirBuilder, File};
 use std::io::prelude::*;
 use std::path::{Path, PathBuf};
 
+use crate::index::Index;
 use crate::object::RawObject;
 use crate::{PidgitError, Result};
 
@@ -204,5 +205,9 @@ impl Repository {
       1 => RawObject::from_path(&paths[0]),
       _ => Err(PidgitError::ObjectNotFound(format!("{} is ambiguous", sha))),
     }
+  }
+
+  pub fn index(&self) -> Result<Index> {
+    Index::from_path(self.gitdir().join("index"))
   }
 }

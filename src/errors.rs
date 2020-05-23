@@ -11,6 +11,7 @@ pub enum PidgitError {
   Encoding(Box<dyn std::error::Error>),
   Internal(Box<dyn std::error::Error>),
   ObjectNotFound(String),
+  Index(String),
 }
 
 type PE = PidgitError;
@@ -26,6 +27,7 @@ impl fmt::Display for PidgitError {
       PE::Encoding(err) => write!(f, "{}", err),
       PE::Internal(err) => write!(f, "weird error: {}", err),
       PE::ObjectNotFound(sha) => write!(f, "object not found: {}", sha),
+      PE::Index(err) => write!(f, "could not parse index file: {}", err),
     }
   }
 }
