@@ -163,8 +163,10 @@ impl Index {
 
       // 1-8 nul bytes as necessary to pad the entry to a multiple of eight bytes
       let len = reader.position() - start_pos;
-      let padding = 8 - (len % 8);
-      reader.seek(std::io::SeekFrom::Current(padding as i64))?;
+      if len % 8 > 0 {
+        let padding = 8 - len % 8;
+        reader.seek(std::io::SeekFrom::Current(padding as i64))?;
+      }
 
       entries.push(IndexEntry {
         ctime_sec,
