@@ -14,5 +14,6 @@ fn main() {
 
   if let Err(err) = res {
     eprintln!("fatal: {}", err);
+    std::process::exit(1);
   }
 }
