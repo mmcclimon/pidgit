@@ -34,7 +34,11 @@ pub fn run(matches: &ArgMatches) -> Result<()> {
   let now = Local::now();
   let fixed = now.with_timezone(now.offset());
 
-  let msg = matches.value_of("message").unwrap();
+  let mut msg = matches.value_of("message").unwrap().to_string();
+
+  if !msg.ends_with("\n") {
+    msg.push_str("\n");
+  }
 
   let tree = repo.as_tree()?;
 
@@ -45,13 +49,12 @@ pub fn run(matches: &ArgMatches) -> Result<()> {
     author_date:    fixed,
     committer:      who,
     committer_date: fixed,
-    message:        msg.to_string(),
+    message:        msg,
     content:        None,
   };
 
   // we write the tree, then write the commit.
   // ...obviously, this should be improved a lot, as it's destructive.
-  // repo.write_object(&tree)?;
   repo.write_tree()?;
   repo.write_object(&commit)?;
 
