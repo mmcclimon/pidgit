@@ -17,15 +17,13 @@ pub struct TreeEntry {
 
 impl GitObject for Tree {
   fn raw_content(&self) -> Vec<u8> {
-    todo!()
+    self.entries.iter().flat_map(|e| e.as_bytes()).collect()
   }
 
   fn type_str(&self) -> &str {
     "tree"
   }
-}
 
-/*
   fn pretty(&self) -> Vec<u8> {
     self
       .entries
@@ -36,7 +34,7 @@ impl GitObject for Tree {
       .as_bytes()
       .to_vec()
   }
-*/
+}
 
 impl Tree {
   pub fn from_content(content: Vec<u8>) -> Self {
@@ -82,5 +80,16 @@ impl Tree {
     }
 
     Self { entries }
+  }
+}
+
+impl TreeEntry {
+  pub fn as_bytes(&self) -> Vec<u8> {
+    let mut ret =
+      format!("{} {}\0", self.mode.trim_start_matches("0"), self.name)
+        .as_bytes()
+        .to_vec();
+    ret.extend(hex::decode(&self.sha).unwrap());
+    ret
   }
 }
