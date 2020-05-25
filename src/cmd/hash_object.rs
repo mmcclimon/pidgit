@@ -5,7 +5,7 @@ use std::io::BufReader;
 use std::path::PathBuf;
 
 use crate::object::{Blob, GitObject};
-use crate::{find_repo, Object, PidgitError, Result};
+use crate::{find_repo, PidgitError, Result};
 
 pub fn app<'a, 'b>() -> App<'a, 'b> {
   App::new("hash-object")
@@ -59,7 +59,7 @@ pub fn run(matches: &ArgMatches) -> Result<()> {
   println!("{}", blob.sha().hexdigest());
 
   if matches.is_present("write") {
-    repo.unwrap().write_object(&Object::Blob(blob))?;
+    repo.unwrap().write_object(&blob)?;
   }
 
   Ok(())

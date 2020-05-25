@@ -4,7 +4,7 @@ use std::io::prelude::*;
 use std::path::{Path, PathBuf};
 
 use crate::index::Index;
-use crate::object::{Object, Tree};
+use crate::object::{GitObject, Object, Tree};
 use crate::{PidgitError, Result};
 
 const GIT_DIR_NAME: &'static str = ".pidgit";
@@ -110,9 +110,8 @@ impl Repository {
     self.git_dir.join(format!("objects/{}/{}", first, rest))
   }
 
-  pub fn write_object(&self, obj: &Object) -> Result<()> {
-    let inner = obj.get_ref();
-    let path = self.path_for_sha(&inner.sha().hexdigest());
+  pub fn write_object(&self, obj: &dyn GitObject) -> Result<()> {
+    let path = self.path_for_sha(&obj.sha().hexdigest());
 
     // create parent dir!
     std::fs::create_dir_all(path.parent().unwrap())?;
@@ -121,8 +120,8 @@ impl Repository {
 
     let mut e = ZlibEncoder::new(file, Compression::default());
 
-    e.write_all(&inner.header())?;
-    e.write_all(&inner.raw_content())?;
+    e.write_all(&obj.header())?;
+    e.write_all(&obj.raw_content())?;
     e.finish()?;
 
     Ok(())
