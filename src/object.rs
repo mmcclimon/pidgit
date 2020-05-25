@@ -1,6 +1,5 @@
 use flate2::read::ZlibDecoder;
 use sha1::Sha1;
-use std::fmt;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
@@ -22,70 +21,44 @@ pub use tree::Tree;
 #[derive(Debug)]
 #[allow(unused)]
 pub enum Object {
-  Blob,
-  Commit,
-  Tree,
-  Tag,
-}
-
-impl Object {
-  pub fn as_str(&self) -> &'static str {
-    match self {
-      Self::Blob => "blob",
-      Self::Commit => "commit",
-      Self::Tag => "tag",
-      Self::Tree => "tree",
-    }
-  }
-
-  pub fn from_str(s: &str) -> Self {
-    match s {
-      "blob" => Self::Blob,
-      "commit" => Self::Commit,
-      "tag" => Self::Tag,
-      "tree" => Self::Tree,
-      _ => panic!("unknown object type {}", s),
-    }
-  }
-}
-
-pub struct RawObject {
-  kind:    Object,
-  size:    u32, // in bytes
-  content: Vec<u8>,
-  header:  Vec<u8>,
-}
-
-impl fmt::Debug for RawObject {
-  fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-    fmt
-      .debug_struct("RawObject")
-      .field("kind", &self.kind)
-      .field("size", &self.size)
-      .field("content", &"<raw data>")
-      .finish()
-  }
+  Blob(Blob),
+  Commit(Commit),
+  Tree(Tree),
+  Tag(Tag),
 }
 
 pub trait GitObject: std::fmt::Debug {
-  fn get_ref(&self) -> &RawObject;
+  // raw bytes, no header
+  fn raw_content(&self) -> &Vec<u8>;
 
-  fn size(&self) -> u32 {
-    self.get_ref().size
+  fn type_str(&self) -> &str;
+
+  fn size(&self) -> usize {
+    self.raw_content().len()
   }
 
-  // default, should be better
-  fn pretty(&self) -> Vec<u8> {
-    self.get_ref().content.to_vec()
+  // returns bytes, because mostly it's useful for generating the sha
+  fn header(&self) -> Vec<u8> {
+    format!("{} {}\0", self.type_str(), self.size())
+      .as_bytes()
+      .to_vec()
   }
 
   fn sha(&self) -> Sha1 {
-    self.get_ref().sha()
+    let mut sha = Sha1::new();
+    sha.update(&self.header());
+    sha.update(self.raw_content());
+    sha
+  }
+
+  // default
+  fn pretty(&self) -> &Vec<u8> {
+    self.raw_content()
   }
 }
 
-impl RawObject {
-  pub fn from_path(path: &Path) -> Result<Self> {
+impl Object {
+  pub fn from_git_db(path: &Path) -> Result<Self> {
     let sha = util::sha_from_path(&path);
 
     if !path.is_file() {
@@ -103,66 +76,39 @@ impl RawObject {
     let bits = s.split(" ").collect::<Vec<_>>();
 
     let string_type = bits[0];
-    let size: u32 = bits[1].parse()?;
 
     // We could be smarter and not eagerly read objects into memory, but I think
     // this is fine for now.
     let mut content = vec![];
     zfile.read_to_end(&mut content)?;
 
-    let kind = Object::from_str(string_type);
-    let header = util::header_for(&kind, &content);
+    let ret = match string_type {
+      "blob" => Object::Blob(Blob::from_content(content)),
+      "commit" => Object::Commit(Commit::from_content(content)),
+      "tag" => Object::Tag(Tag::from_content(content)),
+      "tree" => Object::Tree(Tree::from_content(content)),
+      _ => panic!("unknown object type {}", s),
+    };
 
-    Ok(RawObject {
-      kind,
-      size,
-      content,
-      header,
-    })
-  }
-
-  pub fn size(&self) -> u32 {
-    self.size
-  }
-
-  pub fn kind(&self) -> &Object {
-    &self.kind
-  }
-
-  pub fn content(&self) -> &[u8] {
-    &self.content
-  }
-
-  pub fn sha(&self) -> Sha1 {
-    let mut sha = Sha1::new();
-    sha.update(&self.header());
-    sha.update(&self.content);
-    sha
-  }
-
-  pub fn header(&self) -> &[u8] {
-    &self.header
+    Ok(ret)
   }
 
   // consume self, turning into a GitObject
-  pub fn inflate(self) -> Box<dyn GitObject> {
-    match self.kind {
-      Object::Blob => Box::new(Blob::from_raw(self)),
-      Object::Commit => Box::new(Commit::from(self)),
-      Object::Tag => Box::new(Tag::from_raw(self)),
-      Object::Tree => Box::new(Tree::from_raw(self)),
+  pub fn into_inner(self) -> Box<dyn GitObject> {
+    match self {
+      Object::Blob(blob) => Box::new(blob),
+      Object::Commit(commit) => Box::new(commit),
+      Object::Tag(tag) => Box::new(tag),
+      Object::Tree(tree) => Box::new(tree),
     }
   }
 
-  // dunno about this, but ok
-  pub fn from_content(kind: Object, content: Vec<u8>) -> Result<Self> {
-    let header = util::header_for(&kind, &content);
-
-    Ok(RawObject {
-      kind,
-      size: content.len() as u32,
-      content,
-      header,
-    })
+  pub fn get_ref(&self) -> &dyn GitObject {
+    match self {
+      Object::Blob(blob) => blob,
+      Object::Commit(commit) => commit,
+      Object::Tag(tag) => tag,
+      Object::Tree(tree) => tree,
+    }
   }
 }

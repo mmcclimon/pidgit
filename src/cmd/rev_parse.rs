@@ -17,7 +17,7 @@ pub fn run(m: &ArgMatches) -> Result<()> {
 
   let object = repo.resolve_object(m.value_of("object").unwrap())?;
 
-  println!("{}", object.sha().hexdigest());
+  println!("{}", object.get_ref().sha().hexdigest());
 
   Ok(())
 }

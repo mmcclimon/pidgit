@@ -1,18 +1,22 @@
-use crate::object::{GitObject, RawObject};
+use crate::object::GitObject;
 
 #[derive(Debug)]
 pub struct Tag {
-  raw: RawObject,
+  content: Vec<u8>,
 }
 
 impl GitObject for Tag {
-  fn get_ref(&self) -> &RawObject {
-    &self.raw
+  fn raw_content(&self) -> &Vec<u8> {
+    &self.content
+  }
+
+  fn type_str(&self) -> &str {
+    "tag"
   }
 }
 
 impl Tag {
-  pub fn from_raw(raw: RawObject) -> Self {
-    Self { raw }
+  pub fn from_content(content: Vec<u8>) -> Self {
+    Self { content }
   }
 }

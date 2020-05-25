@@ -2,12 +2,11 @@ use chrono::{DateTime, FixedOffset};
 use std::io::prelude::*;
 use std::io::BufReader;
 
-use crate::object::{GitObject, RawObject};
+use crate::object::{GitObject, Object};
 use crate::Repository;
 
 #[derive(Debug)]
 pub struct Commit {
-  raw:                RawObject,
   pub tree:           String,      // sha
   pub parent_shas:    Vec<String>, // shas
   pub author:         Person,
@@ -25,16 +24,20 @@ pub struct Person {
 }
 
 impl GitObject for Commit {
-  fn get_ref(&self) -> &RawObject {
-    &self.raw
+  fn raw_content(&self) -> &Vec<u8> {
+    todo!()
+  }
+
+  fn type_str(&self) -> &str {
+    "commit"
   }
 }
 
-impl From<RawObject> for Commit {
+impl Commit {
   // really, this should be TryFrom, because we unwrap() a bunch of io errors in
   // here, but if we panic, it's only because there's something really weird
   // going on and we couldn't recover anyway.
-  fn from(raw: RawObject) -> Self {
+  pub fn from_content(content: Vec<u8>) -> Self {
     use std::io::Cursor;
 
     // a commit has:
@@ -46,7 +49,7 @@ impl From<RawObject> for Commit {
     // - a blank line
     // - a message
 
-    let mut reader = Cursor::new(&raw.content);
+    let mut reader = Cursor::new(&content);
     let len = reader.get_ref().len();
 
     let mut tree = None;
@@ -90,7 +93,6 @@ impl From<RawObject> for Commit {
     reader.read_to_string(&mut message).unwrap();
 
     Self {
-      raw,
       tree: tree.expect("did not find tree"),
       parent_shas: parents,
       author: author.expect("did not find author"),
@@ -133,7 +135,13 @@ impl Commit {
     self
       .parent_shas
       .iter()
-      .map(|sha| Self::from(repo.object_for_sha(sha).unwrap()))
+      .filter_map(|sha| {
+        if let Object::Commit(c) = repo.object_for_sha(sha).unwrap() {
+          Some(c)
+        } else {
+          None
+        }
+      })
       .collect()
   }
 

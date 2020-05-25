@@ -4,7 +4,7 @@ use std::io::prelude::*;
 use std::io::BufReader;
 use std::path::PathBuf;
 
-use crate::object::RawObject;
+use crate::object::{Blob, GitObject};
 use crate::{find_repo, Object, PidgitError, Result};
 
 pub fn app<'a, 'b>() -> App<'a, 'b> {
@@ -54,12 +54,12 @@ pub fn run(matches: &ArgMatches) -> Result<()> {
   let mut reader = BufReader::new(File::open(&path)?);
   reader.read_to_end(&mut content)?;
 
-  let obj = RawObject::from_content(Object::Blob, content)?;
+  let blob = Blob::from_content(content);
 
-  println!("{}", obj.sha().hexdigest());
+  println!("{}", blob.sha().hexdigest());
 
   if matches.is_present("write") {
-    repo.unwrap().write_object(&obj)?;
+    repo.unwrap().write_object(&Object::Blob(blob))?;
   }
 
   Ok(())

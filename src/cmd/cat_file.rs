@@ -42,17 +42,18 @@ pub fn run(m: &ArgMatches) -> Result<()> {
   let repo = find_repo()?;
 
   let object = repo.resolve_object(m.value_of("object").unwrap())?;
+  let inner = object.into_inner();
 
-  match object {
-    _ if m.is_present("type") => println!("{}", object.kind().as_str()),
-    _ if m.is_present("size") => println!("{}", object.size()),
-    _ if m.is_present("debug") => println!("{:#?}", object.inflate()),
+  match inner {
+    _ if m.is_present("type") => println!("{}", inner.type_str()),
+    _ if m.is_present("size") => println!("{}", inner.size()),
+    _ if m.is_present("debug") => println!("{:#?}", inner),
     _ if m.is_present("pretty") => {
       let mut stdout = io::stdout();
-      stdout.write_all(&object.inflate().pretty())?;
+      stdout.write_all(&inner.pretty())?;
       stdout.write(b"\n")?;
     },
-    _ => println!("{} {}", object.kind().as_str(), object.size()),
+    _ => println!("{} {}", inner.type_str(), inner.size()),
   };
 
   Ok(())

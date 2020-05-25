@@ -4,7 +4,7 @@ use std::io::prelude::*;
 use std::path::{Path, PathBuf};
 
 use crate::index::Index;
-use crate::object::RawObject;
+use crate::object::Object;
 use crate::{PidgitError, Result};
 
 const GIT_DIR_NAME: &'static str = ".pidgit";
@@ -100,8 +100,8 @@ impl Repository {
     self.git_dir().join(path).is_file()
   }
 
-  pub fn object_for_sha(&self, sha: &str) -> Result<RawObject> {
-    RawObject::from_path(&self.path_for_sha(sha))
+  pub fn object_for_sha(&self, sha: &str) -> Result<Object> {
+    Object::from_git_db(&self.path_for_sha(sha))
   }
 
   // NB returns an absolute path!
@@ -110,8 +110,9 @@ impl Repository {
     self.git_dir.join(format!("objects/{}/{}", first, rest))
   }
 
-  pub fn write_object(&self, obj: &RawObject) -> Result<()> {
-    let path = self.path_for_sha(&obj.sha().hexdigest());
+  pub fn write_object(&self, obj: &Object) -> Result<()> {
+    let inner = obj.get_ref();
+    let path = self.path_for_sha(&inner.sha().hexdigest());
 
     // create parent dir!
     std::fs::create_dir_all(path.parent().unwrap())?;
@@ -120,14 +121,14 @@ impl Repository {
 
     let mut e = ZlibEncoder::new(file, Compression::default());
 
-    e.write_all(&obj.header())?;
-    e.write_all(&obj.content())?;
+    e.write_all(&inner.header())?;
+    e.write_all(&inner.raw_content())?;
     e.finish()?;
 
     Ok(())
   }
 
-  pub fn resolve_object(&self, name: &str) -> Result<RawObject> {
+  pub fn resolve_object(&self, name: &str) -> Result<Object> {
     // this may get more smarts later
     let to_match = match name {
       "head" | "@" => "HEAD",
@@ -153,7 +154,7 @@ impl Repository {
     self.resolve_sha(to_match)
   }
 
-  fn resolve_ref(&self, refstr: &str) -> Result<RawObject> {
+  fn resolve_ref(&self, refstr: &str) -> Result<Object> {
     let raw = self.read_file(refstr)?;
 
     if raw.starts_with("ref: ") {
@@ -164,7 +165,7 @@ impl Repository {
     }
   }
 
-  fn resolve_sha(&self, sha: &str) -> Result<RawObject> {
+  fn resolve_sha(&self, sha: &str) -> Result<Object> {
     if sha.len() < 4 {
       return Err(PidgitError::ObjectNotFound(format!(
         "{} is too short to be a sha",
@@ -200,7 +201,7 @@ impl Repository {
 
     match paths.len() {
       0 => not_found,
-      1 => RawObject::from_path(&paths[0]),
+      1 => Object::from_git_db(&paths[0]),
       _ => Err(PidgitError::ObjectNotFound(format!("{} is ambiguous", sha))),
     }
   }

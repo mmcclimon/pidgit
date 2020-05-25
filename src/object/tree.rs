@@ -1,8 +1,7 @@
-use crate::object::{GitObject, RawObject};
+use crate::object::GitObject;
 
 #[derive(Debug)]
 pub struct Tree {
-  raw:     RawObject,
   entries: Vec<TreeEntry>,
 }
 
@@ -17,10 +16,16 @@ pub struct TreeEntry {
 }
 
 impl GitObject for Tree {
-  fn get_ref(&self) -> &RawObject {
-    &self.raw
+  fn raw_content(&self) -> &Vec<u8> {
+    todo!()
   }
 
+  fn type_str(&self) -> &str {
+    "tree"
+  }
+}
+
+/*
   fn pretty(&self) -> Vec<u8> {
     self
       .entries
@@ -31,10 +36,10 @@ impl GitObject for Tree {
       .as_bytes()
       .to_vec()
   }
-}
+*/
 
 impl Tree {
-  pub fn from_raw(raw: RawObject) -> Self {
+  pub fn from_content(content: Vec<u8>) -> Self {
     use std::io::prelude::*;
     use std::io::Cursor;
 
@@ -44,7 +49,7 @@ impl Tree {
     // mode filename NULL 20-bytes-of-sha
     let mut entries = vec![];
 
-    let mut reader = Cursor::new(&raw.content);
+    let mut reader = Cursor::new(&content);
     let len = reader.get_ref().len();
 
     while (reader.position() as usize) < len {
@@ -76,6 +81,6 @@ impl Tree {
       });
     }
 
-    Self { raw, entries }
+    Self { entries }
   }
 }

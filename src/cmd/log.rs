@@ -1,7 +1,7 @@
 use clap::{App, Arg, ArgMatches};
 
-use crate::object::{Commit, GitObject};
-use crate::{find_repo, Result};
+use crate::object::{GitObject, Object};
+use crate::{find_repo, PidgitError, Result};
 
 pub fn app<'a, 'b>() -> App<'a, 'b> {
   App::new("log").about("show commit logs").arg(
@@ -14,9 +14,18 @@ pub fn app<'a, 'b>() -> App<'a, 'b> {
 pub fn run(matches: &ArgMatches) -> Result<()> {
   let repo = find_repo()?;
 
-  let object = repo.resolve_object(matches.value_of("ref").unwrap())?;
+  let to_find = matches.value_of("ref").unwrap();
+  let object = repo.resolve_object(to_find)?;
 
-  let mut c = Commit::from(object);
+  let mut c = match object {
+    Object::Commit(commit) => commit,
+    _ => {
+      return Err(PidgitError::Generic(format!(
+        "ref {} is not a commit!",
+        to_find,
+      )))
+    },
+  };
 
   // this is terrible, but expedient
   loop {
