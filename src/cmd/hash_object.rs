@@ -1,7 +1,4 @@
 use clap::{App, Arg, ArgMatches};
-use std::fs::File;
-use std::io::prelude::*;
-use std::io::BufReader;
 use std::path::PathBuf;
 
 use crate::object::{Blob, GitObject};
@@ -49,18 +46,13 @@ pub fn run(matches: &ArgMatches) -> Result<()> {
     )));
   }
 
-  let mut content = vec![];
-
-  let mut reader = BufReader::new(File::open(&path)?);
-  reader.read_to_end(&mut content)?;
-
-  let blob = Blob::from_content(content);
-
-  println!("{}", blob.sha().hexdigest());
+  let blob = Blob::from_path(&path)?;
 
   if matches.is_present("write") {
     repo.unwrap().write_object(&blob)?;
   }
+
+  println!("{}", blob.sha().hexdigest());
 
   Ok(())
 }
