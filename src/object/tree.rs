@@ -1,4 +1,5 @@
-use crate::object::{Blob, GitObject, Result};
+use crate::object::{Blob, GitObject, PidgitError, Result};
+use crate::Repository;
 use std::io::prelude::*;
 use std::path::PathBuf;
 
@@ -15,6 +16,7 @@ pub struct TreeEntry {
   name: String,
   sha:  String,
   kind: String,
+  path: Option<PathBuf>,
 }
 
 impl GitObject for Tree {
@@ -78,6 +80,7 @@ impl Tree {
         kind: entry_type.to_string(),
         name: String::from_utf8_lossy(&filename).to_string(), // improve me
         sha:  hex::encode(sha),
+        path: None,
       });
     }
 
@@ -135,10 +138,43 @@ impl Tree {
         name: path.file_name().unwrap().to_string_lossy().to_string(),
         sha:  tree.sha().hexdigest(),
         kind: tree.type_str().to_string(),
+        path: Some(path.clone()),
       })
     } else {
       TreeEntry::from_path(&path)
     }
+  }
+
+  pub fn write(&self, repo: &Repository) -> Result<()> {
+    for e in &self.entries {
+      let git_path = repo.path_for_sha(&e.sha);
+      if git_path.is_file() {
+        // println!("have {} {}", e.kind, e.name);
+        continue;
+      }
+
+      if let Some(ref path) = e.path {
+        match e.kind.as_str() {
+          "blob" => {
+            // println!("need to write blob {}", e.name);
+            let blob = Blob::from_path(path)?;
+            repo.write_object(&blob)?;
+          },
+          "tree" => {
+            // println!("need to write tree: {}", e.name);
+            let t = Self::from_path(path)?;
+            t.write(repo)?;
+          },
+          _ => panic!("unknown type!"),
+        }
+      } else {
+        return Err(PidgitError::Generic(
+          "cannot recurse on TreeEntry with no path".to_string(),
+        ));
+      }
+    }
+
+    repo.write_object(self)
   }
 }
 
@@ -168,6 +204,7 @@ impl TreeEntry {
       name: path.file_name().unwrap().to_string_lossy().to_string(),
       sha:  blob.sha().hexdigest(),
       kind: "blob".to_string(),
+      path: Some(path.clone()),
     })
   }
 }

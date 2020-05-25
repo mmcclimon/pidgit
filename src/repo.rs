@@ -212,4 +212,8 @@ impl Repository {
   pub fn as_tree(&self) -> Result<Tree> {
     Tree::from_path(&self.work_tree)
   }
+
+  pub fn write_tree(&self) -> Result<()> {
+    self.as_tree()?.write(&self)
+  }
 }

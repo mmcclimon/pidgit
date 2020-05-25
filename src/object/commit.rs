@@ -15,11 +15,11 @@ pub struct Commit {
   pub committer:      Person,
   pub committer_date: DateTime<FixedOffset>,
   pub message:        String,
-  content:            Option<Vec<u8>>,
+  pub content:        Option<Vec<u8>>,
 }
 
 // I have no idea what to call this
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Person {
   pub name:  String,
   pub email: String,

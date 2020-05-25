@@ -14,6 +14,7 @@ mod tree;
 
 pub use blob::Blob;
 pub use commit::Commit;
+pub use commit::Person;
 pub use tag::Tag;
 pub use tree::Tree;
 
