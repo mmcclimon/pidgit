@@ -62,7 +62,7 @@ pub fn run(_matches: &ArgMatches) -> Result<()> {
 
   println!(
     "initialized empty pidgit repository at {}",
-    repo.gitdir().display()
+    repo.git_dir().display()
   );
 
   Ok(())

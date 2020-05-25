@@ -7,12 +7,12 @@ use crate::index::Index;
 use crate::object::RawObject;
 use crate::{PidgitError, Result};
 
-const GITDIR_NAME: &'static str = ".pidgit";
+const GIT_DIR_NAME: &'static str = ".pidgit";
 
 #[derive(Debug)]
 pub struct Repository {
   work_tree: PathBuf,
-  gitdir:    PathBuf,
+  git_dir:   PathBuf,
 }
 
 impl Repository {
@@ -26,33 +26,33 @@ impl Repository {
 
     Ok(Repository {
       work_tree: dir.to_path_buf(),
-      gitdir:    dir.join(GITDIR_NAME),
+      git_dir:   dir.join(GIT_DIR_NAME),
     })
   }
 
-  pub fn from_gitdir(gitdir: &Path) -> Result<Self> {
-    let path = gitdir.canonicalize()?;
+  pub fn from_git_dir(git_dir: &Path) -> Result<Self> {
+    let path = git_dir.canonicalize()?;
 
     let parent = path.parent().ok_or_else(|| {
       PidgitError::Generic(format!(
-        "cannot resolve gitdir: {} has no parent",
+        "cannot resolve git_dir: {} has no parent",
         path.display()
       ))
     })?;
 
     Ok(Repository {
       work_tree: parent.to_path_buf(),
-      gitdir:    gitdir.to_path_buf(),
+      git_dir:   git_dir.to_path_buf(),
     })
   }
 
   pub fn create_empty(root: &Path) -> Result<Self> {
-    let gitdir = root.join(GITDIR_NAME);
-    DirBuilder::new().create(&gitdir)?;
+    let git_dir = root.join(GIT_DIR_NAME);
+    DirBuilder::new().create(&git_dir)?;
 
     Ok(Repository {
       work_tree: root.to_path_buf(),
-      gitdir,
+      git_dir,
     })
   }
 
@@ -60,42 +60,44 @@ impl Repository {
     &self.work_tree
   }
 
-  pub fn gitdir(&self) -> &PathBuf {
-    &self.gitdir
+  pub fn git_dir(&self) -> &PathBuf {
+    &self.git_dir
   }
 
+  // given a path relative to git_dir, create that file
   pub fn create_file<P>(&self, path: P) -> Result<File>
   where
     P: AsRef<Path> + std::fmt::Debug,
   {
-    File::create(self.gitdir.join(path)).map_err(|e| e.into())
+    File::create(self.git_dir.join(path)).map_err(|e| e.into())
   }
 
+  // given a path relative to git_dir, create that file
   pub fn create_dir<P>(&self, path: P) -> Result<()>
   where
     P: AsRef<Path> + std::fmt::Debug,
   {
     DirBuilder::new()
       .recursive(true)
-      .create(self.gitdir.join(path))
+      .create(self.git_dir.join(path))
       .map_err(|e| e.into())
   }
 
-  // give it a path relative to .gitdir, read into a string
-  pub fn read_git_path<P>(&self, path: P) -> Result<String>
+  // give it a path relative to .git_dir, read into a string
+  pub fn read_file<P>(&self, path: P) -> Result<String>
   where
     P: AsRef<Path> + std::fmt::Debug,
   {
     let mut s = String::new();
-    File::open(self.gitdir().join(path))?.read_to_string(&mut s)?;
+    File::open(self.git_dir().join(path))?.read_to_string(&mut s)?;
     Ok(s.trim().to_string())
   }
 
-  fn git_path_exists<P>(&self, path: P) -> bool
+  fn path_exists<P>(&self, path: P) -> bool
   where
     P: AsRef<Path> + std::fmt::Debug,
   {
-    self.gitdir().join(path).is_file()
+    self.git_dir().join(path).is_file()
   }
 
   pub fn object_for_sha(&self, sha: &str) -> Result<RawObject> {
@@ -105,7 +107,7 @@ impl Repository {
   // NB returns an absolute path!
   pub fn path_for_sha(&self, sha: &str) -> PathBuf {
     let (first, rest) = sha.split_at(2);
-    self.gitdir.join(format!("objects/{}/{}", first, rest))
+    self.git_dir.join(format!("objects/{}/{}", first, rest))
   }
 
   pub fn write_object(&self, obj: &RawObject) -> Result<()> {
@@ -136,14 +138,14 @@ impl Repository {
     for prefix in &[".", "refs", "refs/tags", "refs/heads", "refs/remotes"] {
       let joined = format!("{}/{}", prefix, to_match);
 
-      if self.git_path_exists(&joined) {
+      if self.path_exists(&joined) {
         return self.resolve_ref(&joined);
       }
     }
 
     // also check head of remotes
     let remote_head = format!("refs/remotes/{}/HEAD", to_match);
-    if self.git_path_exists(&remote_head) {
+    if self.path_exists(&remote_head) {
       return self.resolve_ref(&remote_head);
     }
 
@@ -152,7 +154,7 @@ impl Repository {
   }
 
   fn resolve_ref(&self, refstr: &str) -> Result<RawObject> {
-    let raw = self.read_git_path(refstr)?;
+    let raw = self.read_file(refstr)?;
 
     if raw.starts_with("ref: ") {
       let symref = raw.trim_start_matches("ref: ");
@@ -160,10 +162,6 @@ impl Repository {
     } else {
       self.object_for_sha(&raw)
     }
-  }
-
-  pub fn head(&self) -> Result<RawObject> {
-    self.resolve_ref("HEAD")
   }
 
   fn resolve_sha(&self, sha: &str) -> Result<RawObject> {
@@ -182,7 +180,7 @@ impl Repository {
 
     // we need to walk the objects dir
     let (prefix, rest) = sha.split_at(2);
-    let base = self.gitdir.join(format!("objects/{}", &prefix));
+    let base = self.git_dir.join(format!("objects/{}", &prefix));
 
     if !base.is_dir() {
       return not_found;
@@ -208,6 +206,6 @@ impl Repository {
   }
 
   pub fn index(&self) -> Result<Index> {
-    Index::from_path(self.gitdir().join("index"))
+    Index::from_path(self.git_dir().join("index"))
   }
 }

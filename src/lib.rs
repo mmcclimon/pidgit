@@ -15,7 +15,7 @@ pub fn find_repo() -> Result<Repository> {
     use std::path::PathBuf;
     let path = PathBuf::from(dir).canonicalize()?;
 
-    return Repository::from_gitdir(&path);
+    return Repository::from_git_dir(&path);
   }
 
   let pwd = std::env::current_dir()?;
