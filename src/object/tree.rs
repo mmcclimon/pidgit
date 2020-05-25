@@ -1,4 +1,6 @@
-use crate::object::GitObject;
+use crate::object::{Blob, GitObject, Result};
+use std::io::prelude::*;
+use std::path::PathBuf;
 
 #[derive(Debug)]
 pub struct Tree {
@@ -81,6 +83,63 @@ impl Tree {
 
     Self { entries }
   }
+
+  pub fn from_path(base: &PathBuf) -> Result<Self> {
+    // hard-coding the ignores for now...
+    use std::collections::HashSet;
+    use std::ffi::OsString;
+    let mut ignore: HashSet<OsString> = HashSet::new();
+    ignore.insert(".git".into());
+    ignore.insert(".pidgit".into());
+    ignore.insert("target".into());
+    ignore.insert(".DS_Store".into());
+
+    let mut ftignore: HashSet<OsString> = HashSet::new();
+    ftignore.insert("swp".into());
+    ftignore.insert("swo".into());
+
+    let mut dir_entries = std::fs::read_dir(base)?
+      .filter_map(std::result::Result::ok)
+      .map(|e| e.path())
+      .collect::<Vec<_>>();
+
+    dir_entries.sort();
+
+    let mut entries = vec![];
+
+    for path in dir_entries {
+      if ignore.contains(path.file_name().unwrap()) {
+        continue;
+      }
+
+      if let Some(ext) = path.extension() {
+        if ftignore.contains(ext) {
+          continue;
+        }
+      }
+
+      let e = Self::entry_for_path(&path)?;
+      entries.push(e);
+    }
+
+    // println!("{:?}", entries);
+
+    Ok(Self { entries })
+  }
+
+  fn entry_for_path(path: &PathBuf) -> Result<TreeEntry> {
+    if path.is_dir() {
+      let tree = Self::from_path(&path)?;
+      Ok(TreeEntry {
+        mode: "040000".to_string(), // todo
+        name: path.file_name().unwrap().to_string_lossy().to_string(),
+        sha:  tree.sha().hexdigest(),
+        kind: tree.type_str().to_string(),
+      })
+    } else {
+      TreeEntry::from_path(&path)
+    }
+  }
 }
 
 impl TreeEntry {
@@ -91,5 +150,24 @@ impl TreeEntry {
         .to_vec();
     ret.extend(hex::decode(&self.sha).unwrap());
     ret
+  }
+
+  // XXX poorly named: only works on blobs
+  pub fn from_path(path: &PathBuf) -> Result<Self> {
+    use std::fs::File;
+    use std::io::BufReader;
+
+    let mut content = vec![];
+    let mut reader = BufReader::new(File::open(&path)?);
+    reader.read_to_end(&mut content)?;
+
+    let blob = Blob::from_content(content);
+
+    Ok(TreeEntry {
+      mode: "100644".to_string(), // todo
+      name: path.file_name().unwrap().to_string_lossy().to_string(),
+      sha:  blob.sha().hexdigest(),
+      kind: "blob".to_string(),
+    })
   }
 }

@@ -4,7 +4,7 @@ use std::io::prelude::*;
 use std::path::{Path, PathBuf};
 
 use crate::index::Index;
-use crate::object::Object;
+use crate::object::{Object, Tree};
 use crate::{PidgitError, Result};
 
 const GIT_DIR_NAME: &'static str = ".pidgit";
@@ -208,5 +208,9 @@ impl Repository {
 
   pub fn index(&self) -> Result<Index> {
     Index::from_path(self.git_dir().join("index"))
+  }
+
+  pub fn as_tree(&self) -> Result<Tree> {
+    Tree::from_path(&self.work_tree)
   }
 }
