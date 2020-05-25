@@ -4,8 +4,8 @@ use std::io::prelude::*;
 use std::path::{Path, PathBuf};
 
 use crate::index::Index;
-use crate::object::{GitObject, Object, Tree};
-use crate::{PidgitError, Result};
+use crate::object::{Object, Tree};
+use crate::prelude::*;
 
 const GIT_DIR_NAME: &'static str = ".pidgit";
 

@@ -1,7 +1,7 @@
 use clap::{App, Arg, ArgMatches};
 
-use crate::object::{GitObject, Object};
-use crate::{find_repo, PidgitError, Result};
+use crate::object::Object;
+use crate::prelude::*;
 
 pub fn app<'a, 'b>() -> App<'a, 'b> {
   App::new("log").about("show commit logs").arg(
@@ -12,7 +12,7 @@ pub fn app<'a, 'b>() -> App<'a, 'b> {
 }
 
 pub fn run(matches: &ArgMatches) -> Result<()> {
-  let repo = find_repo()?;
+  let repo = util::find_repo()?;
 
   let to_find = matches.value_of("ref").unwrap();
   let object = repo.resolve_object(to_find)?;

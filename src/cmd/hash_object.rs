@@ -1,8 +1,8 @@
 use clap::{App, Arg, ArgMatches};
 use std::path::PathBuf;
 
-use crate::object::{Blob, GitObject};
-use crate::{find_repo, PidgitError, Result};
+use crate::object::Blob;
+use crate::prelude::*;
 
 pub fn app<'a, 'b>() -> App<'a, 'b> {
   App::new("hash-object")
@@ -24,7 +24,7 @@ pub fn app<'a, 'b>() -> App<'a, 'b> {
 }
 
 pub fn run(matches: &ArgMatches) -> Result<()> {
-  let repo = find_repo();
+  let repo = util::find_repo();
 
   if repo.is_err() && matches.is_present("write") {
     return repo.map(|_| ());

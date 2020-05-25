@@ -1,4 +1,4 @@
-use crate::Result;
+use crate::prelude::*;
 use clap::ArgMatches;
 
 mod cat_file;

@@ -1,6 +1,6 @@
 use clap::{App, Arg, ArgMatches};
 
-use crate::{find_repo, Result};
+use crate::prelude::*;
 
 pub fn app<'a, 'b>() -> App<'a, 'b> {
   App::new("rev-parse")
@@ -13,7 +13,7 @@ pub fn app<'a, 'b>() -> App<'a, 'b> {
 }
 
 pub fn run(m: &ArgMatches) -> Result<()> {
-  let repo = find_repo()?;
+  let repo = util::find_repo()?;
 
   let object = repo.resolve_object(m.value_of("object").unwrap())?;
 

@@ -3,8 +3,8 @@ use clap::{App, Arg, ArgMatches};
 use std::fs::OpenOptions;
 use std::io::prelude::*;
 
-use crate::object::{Commit, GitObject, Person};
-use crate::{find_repo, Result};
+use crate::object::{Commit, Person};
+use crate::prelude::*;
 
 pub fn app<'a, 'b>() -> App<'a, 'b> {
   App::new("commit")
@@ -21,7 +21,7 @@ pub fn app<'a, 'b>() -> App<'a, 'b> {
 }
 
 pub fn run(matches: &ArgMatches) -> Result<()> {
-  let repo = find_repo()?;
+  let repo = util::find_repo()?;
 
   // first pass, will improve later
   let who = Person {

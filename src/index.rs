@@ -3,7 +3,7 @@ use std::fs::File;
 use std::io::{prelude::*, Cursor};
 use std::path::Path;
 
-use crate::{PidgitError, Result};
+use crate::prelude::*;
 
 #[derive(Debug)]
 pub struct Index {

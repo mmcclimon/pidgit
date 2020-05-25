@@ -3,8 +3,7 @@ use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::PathBuf;
 
-use crate::object::GitObject;
-use crate::Result;
+use crate::prelude::*;
 
 pub struct Blob {
   content: Vec<u8>,

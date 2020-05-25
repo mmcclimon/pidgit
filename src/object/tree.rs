@@ -1,7 +1,8 @@
-use crate::object::{Blob, GitObject, PidgitError, Result};
-use crate::Repository;
 use std::io::prelude::*;
 use std::path::PathBuf;
+
+use crate::object::Blob;
+use crate::prelude::*;
 
 #[derive(Debug)]
 pub struct Tree {

@@ -3,8 +3,8 @@ use std::fmt;
 use std::io::prelude::*;
 use std::io::BufReader;
 
-use crate::object::{GitObject, Object};
-use crate::Repository;
+use crate::object::Object;
+use crate::prelude::*;
 
 #[derive(Debug)]
 pub struct Commit {

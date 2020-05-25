@@ -1,7 +1,7 @@
 use clap::{App, ArgMatches};
 use std::io::Write;
 
-use crate::{find_repo, Repository, Result};
+use crate::prelude::*;
 
 const HEAD: &'static str = "ref: refs/heads/master\n";
 
@@ -32,7 +32,7 @@ pub fn app<'a, 'b>() -> App<'a, 'b> {
 //
 
 pub fn run(_matches: &ArgMatches) -> Result<()> {
-  if let Ok(repo) = find_repo() {
+  if let Ok(repo) = util::find_repo() {
     // maybe later: die if we can't initialize a repo from it
     println!(
       "{} already exists, nothing to do!",

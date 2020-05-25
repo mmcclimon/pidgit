@@ -1,7 +1,7 @@
 use clap::{App, Arg, ArgMatches};
 use std::io::{self, Write};
 
-use crate::{find_repo, Result};
+use crate::prelude::*;
 
 pub fn app<'a, 'b>() -> App<'a, 'b> {
   App::new("cat-file")
@@ -39,7 +39,7 @@ pub fn app<'a, 'b>() -> App<'a, 'b> {
 }
 
 pub fn run(m: &ArgMatches) -> Result<()> {
-  let repo = find_repo()?;
+  let repo = util::find_repo()?;
 
   let object = repo.resolve_object(m.value_of("object").unwrap())?;
   let inner = object.into_inner();
