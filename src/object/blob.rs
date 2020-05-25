@@ -7,8 +7,8 @@ pub struct Blob {
 }
 
 impl GitObject for Blob {
-  fn raw_content(&self) -> &Vec<u8> {
-    &self.content
+  fn raw_content(&self) -> Vec<u8> {
+    self.content.clone()
   }
 
   fn type_str(&self) -> &str {

@@ -1,4 +1,5 @@
 use chrono::{DateTime, FixedOffset};
+use std::fmt;
 use std::io::prelude::*;
 use std::io::BufReader;
 
@@ -14,6 +15,7 @@ pub struct Commit {
   pub committer:      Person,
   pub committer_date: DateTime<FixedOffset>,
   pub message:        String,
+  content:            Option<Vec<u8>>,
 }
 
 // I have no idea what to call this
@@ -24,8 +26,36 @@ pub struct Person {
 }
 
 impl GitObject for Commit {
-  fn raw_content(&self) -> &Vec<u8> {
-    todo!()
+  fn raw_content(&self) -> Vec<u8> {
+    if let Some(c) = &self.content {
+      return c.clone();
+    }
+
+    let mut lines = vec![];
+
+    lines.push(format!("tree {}", self.tree));
+
+    for parent in &self.parent_shas {
+      lines.push(format!("parent {}", parent));
+    }
+
+    lines.push(format!(
+      "author {} {}",
+      self.author,
+      self.author_date.format("%s %z")
+    ));
+
+    lines.push(format!(
+      "committer {} {}",
+      self.committer,
+      self.committer_date.format("%s %z")
+    ));
+
+    lines.push("".to_string());
+
+    lines.push(format!("{}", self.message));
+
+    lines.join("\n").as_bytes().to_vec()
   }
 
   fn type_str(&self) -> &str {
@@ -100,6 +130,7 @@ impl Commit {
       committer: committer.expect("did not find committer"),
       committer_date: committer_date.expect("did not find committer date"),
       message,
+      content: Some(content),
     }
   }
 }
@@ -153,5 +184,11 @@ impl Commit {
       .unwrap();
 
     &self.message[0..idx]
+  }
+}
+
+impl fmt::Display for Person {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "{} <{}>", self.name, self.email)
   }
 }

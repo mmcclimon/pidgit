@@ -6,8 +6,8 @@ pub struct Tag {
 }
 
 impl GitObject for Tag {
-  fn raw_content(&self) -> &Vec<u8> {
-    &self.content
+  fn raw_content(&self) -> Vec<u8> {
+    self.content.clone()
   }
 
   fn type_str(&self) -> &str {

@@ -29,7 +29,7 @@ pub enum Object {
 
 pub trait GitObject: std::fmt::Debug {
   // raw bytes, no header
-  fn raw_content(&self) -> &Vec<u8>;
+  fn raw_content(&self) -> Vec<u8>;
 
   fn type_str(&self) -> &str;
 
@@ -47,13 +47,13 @@ pub trait GitObject: std::fmt::Debug {
   fn sha(&self) -> Sha1 {
     let mut sha = Sha1::new();
     sha.update(&self.header());
-    sha.update(self.raw_content());
+    sha.update(&self.raw_content());
     sha
   }
 
   // default
-  fn pretty(&self) -> &Vec<u8> {
-    self.raw_content()
+  fn pretty(&self) -> Vec<u8> {
+    self.raw_content().clone()
   }
 }
 

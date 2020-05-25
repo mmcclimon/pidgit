@@ -16,7 +16,7 @@ pub struct TreeEntry {
 }
 
 impl GitObject for Tree {
-  fn raw_content(&self) -> &Vec<u8> {
+  fn raw_content(&self) -> Vec<u8> {
     todo!()
   }
 
