@@ -1,4 +1,5 @@
 use flate2::{write::ZlibEncoder, Compression};
+use sha1::Sha1;
 use std::fs::{DirBuilder, File};
 use std::io::prelude::*;
 use std::path::{Path, PathBuf};
@@ -215,5 +216,25 @@ impl Repository {
 
   pub fn write_tree(&self) -> Result<()> {
     self.as_tree()?.write(&self)
+  }
+
+  pub fn update_head(&self, new_sha: &Sha1) -> Result<()> {
+    use std::fs::OpenOptions;
+
+    let raw = self.read_file("HEAD")?;
+
+    let suffix = if raw.starts_with("ref: ") {
+      raw.trim_start_matches("ref: ")
+    } else {
+      // must be a sha
+      "HEAD"
+    };
+
+    let mut f = OpenOptions::new()
+      .write(true)
+      .open(self.git_dir().join(suffix))?;
+
+    f.write_all(format!("{}\n", new_sha.hexdigest()).as_bytes())?;
+    Ok(())
   }
 }

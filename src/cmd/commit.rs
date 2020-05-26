@@ -1,7 +1,5 @@
 use chrono::Local;
 use clap::{App, Arg, ArgMatches};
-use std::fs::OpenOptions;
-use std::io::prelude::*;
 
 use crate::object::{Commit, Person};
 use crate::prelude::*;
@@ -57,13 +55,7 @@ pub fn run(matches: &ArgMatches) -> Result<()> {
   // ...obviously, this should be improved a lot, as it's destructive.
   repo.write_tree()?;
   repo.write_object(&commit)?;
-
-  // update our ref
-  let mut f = OpenOptions::new()
-    .write(true)
-    .open(repo.git_dir().join("refs/heads/master"))?;
-
-  f.write_all(format!("{}\n", commit.sha().hexdigest()).as_bytes())?;
+  repo.update_head(&commit.sha())?;
 
   println!("[{}] {}", &commit.sha().hexdigest()[0..8], commit.title());
 
