@@ -200,8 +200,18 @@ impl TreeEntry {
 
     let blob = Blob::from_content(content);
 
+    let mut mode = "100644";
+
+    if let Ok(meta) = path.metadata() {
+      use std::os::unix::fs::PermissionsExt;
+      let perms = meta.permissions();
+      if perms.mode() & 0o111 != 0 {
+        mode = "100755";
+      }
+    }
+
     Ok(TreeEntry {
-      mode: "100644".to_string(), // todo
+      mode: mode.to_string(),
       name: path.file_name().unwrap().to_string_lossy().to_string(),
       sha:  blob.sha().hexdigest(),
       kind: "blob".to_string(),
