@@ -1,5 +1,7 @@
 use flate2::{write::ZlibEncoder, Compression};
 use sha1::Sha1;
+use std::collections::HashSet;
+use std::ffi::OsString;
 use std::fs::{DirBuilder, File};
 use std::io::prelude::*;
 use std::path::{Path, PathBuf};
@@ -14,6 +16,25 @@ const GIT_DIR_NAME: &'static str = ".pidgit";
 pub struct Repository {
   work_tree: PathBuf,
   git_dir:   PathBuf,
+  ignore:    HashSet<OsString>,
+  ftignore:  HashSet<OsString>,
+}
+
+// TODO for later
+fn default_ignore() -> HashSet<OsString> {
+  let mut ignore: HashSet<OsString> = HashSet::new();
+  ignore.insert(".git".into());
+  ignore.insert(".pidgit".into());
+  ignore.insert("target".into());
+  ignore.insert(".DS_Store".into());
+  ignore
+}
+
+fn default_ftignore() -> HashSet<OsString> {
+  let mut ftignore: HashSet<OsString> = HashSet::new();
+  ftignore.insert("swp".into());
+  ftignore.insert("swo".into());
+  ftignore
 }
 
 impl Repository {
@@ -28,6 +49,8 @@ impl Repository {
     Ok(Repository {
       work_tree: dir.to_path_buf(),
       git_dir:   dir.join(GIT_DIR_NAME),
+      ignore:    default_ignore(),
+      ftignore:  default_ftignore(),
     })
   }
 
@@ -44,6 +67,8 @@ impl Repository {
     Ok(Repository {
       work_tree: parent.to_path_buf(),
       git_dir:   git_dir.to_path_buf(),
+      ignore:    default_ignore(),
+      ftignore:  default_ftignore(),
     })
   }
 
@@ -54,6 +79,8 @@ impl Repository {
     Ok(Repository {
       work_tree: root.to_path_buf(),
       git_dir,
+      ignore: default_ignore(),
+      ftignore: default_ftignore(),
     })
   }
 
@@ -236,5 +263,38 @@ impl Repository {
 
     f.write_all(format!("{}\n", new_sha.hexdigest()).as_bytes())?;
     Ok(())
+  }
+
+  pub fn list_files(&self) -> Result<Vec<PathBuf>> {
+    self.list_files_from_base(&self.work_tree)
+  }
+
+  fn list_files_from_base(&self, base: &PathBuf) -> Result<Vec<PathBuf>> {
+    let mut dir_entries = vec![];
+
+    for e in std::fs::read_dir(base)?.filter_map(std::result::Result::ok) {
+      let path = e.path();
+
+      if self.ignore.contains(path.file_name().unwrap()) {
+        continue;
+      }
+
+      if let Some(ext) = path.extension() {
+        if self.ftignore.contains(ext) {
+          continue;
+        }
+      }
+
+      if path.is_dir() {
+        dir_entries.extend(self.list_files_from_base(&path)?);
+      } else {
+        dir_entries
+          .push(path.strip_prefix(&self.work_tree).unwrap().to_path_buf());
+      }
+    }
+
+    dir_entries.sort_unstable();
+
+    Ok(dir_entries)
   }
 }
