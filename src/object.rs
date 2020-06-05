@@ -16,7 +16,7 @@ pub use blob::Blob;
 pub use commit::Commit;
 pub use commit::Person;
 pub use tag::Tag;
-pub use tree::Tree;
+pub use tree::{Tree, TreeEntry};
 
 // object is a pretty generic name, but hey
 #[derive(Debug)]

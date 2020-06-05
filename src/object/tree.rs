@@ -1,7 +1,8 @@
+use sha1::Sha1;
 use std::io::prelude::*;
 use std::path::PathBuf;
 
-use crate::object::Blob;
+// use crate::object::Blob;
 use crate::prelude::*;
 
 #[derive(Debug)]
@@ -13,11 +14,9 @@ pub struct Tree {
 // out the lifetimes.
 #[derive(Debug)]
 pub struct TreeEntry {
+  path: PathBuf,
   mode: String,
-  name: String,
   sha:  String,
-  kind: String,
-  path: Option<PathBuf>,
 }
 
 impl GitObject for Tree {
@@ -33,7 +32,15 @@ impl GitObject for Tree {
     self
       .entries
       .iter()
-      .map(|e| format!("{} {} {}    {}", e.mode, e.kind, e.sha, e.name,))
+      .map(|e| {
+        format!(
+          "{} {} {}    {}",
+          e.mode,
+          "blob",
+          e.sha,
+          e.path.file_name().unwrap().to_string_lossy(),
+        )
+      })
       .collect::<Vec<_>>()
       .join("\n")
       .as_bytes()
@@ -69,19 +76,21 @@ impl Tree {
 
       let mode_str = format!("{:0>6}", String::from_utf8(mode).expect(err));
 
-      let entry_type = match &mode_str[..3] {
-        "040" => "tree",
-        "100" => "blob",
-        "120" => "blob", // symlink
-        _ => "????",
-      };
+      // let entry_type = match &mode_str[..3] {
+      //   "040" => "tree",
+      //   "100" => "blob",
+      //   "120" => "blob", // symlink
+      //   _ => "????",
+      // };
+
+      let p = String::from_utf8_lossy(&filename);
 
       entries.push(TreeEntry {
         mode: mode_str,
-        kind: entry_type.to_string(),
-        name: String::from_utf8_lossy(&filename).to_string(), // improve me
+        // kind: entry_type.to_string(),
+        // name: String::from_utf8_lossy(&filename).to_string(), // improve me
         sha:  hex::encode(sha),
-        path: None,
+        path: PathBuf::from(p.to_string()),
       });
     }
 
@@ -136,10 +145,10 @@ impl Tree {
       let tree = Self::from_path(&path)?;
       Ok(TreeEntry {
         mode: "040000".to_string(), // todo
-        name: path.file_name().unwrap().to_string_lossy().to_string(),
+        // name: path.file_name().unwrap().to_string_lossy().to_string(),
         sha:  tree.sha().hexdigest(),
-        kind: tree.type_str().to_string(),
-        path: Some(path.clone()),
+        // kind: tree.type_str().to_string(),
+        path: path.clone(),
       })
     } else {
       TreeEntry::from_path(&path)
@@ -154,6 +163,9 @@ impl Tree {
         continue;
       }
 
+      todo!("re-implement with new entry abstraction");
+
+      /*
       if let Some(ref path) = e.path {
         match e.kind.as_str() {
           "blob" => {
@@ -173,6 +185,7 @@ impl Tree {
           "cannot recurse on TreeEntry with no path".to_string(),
         ));
       }
+      */
     }
 
     repo.write_object(self)
@@ -181,10 +194,13 @@ impl Tree {
 
 impl TreeEntry {
   pub fn as_bytes(&self) -> Vec<u8> {
-    let mut ret =
-      format!("{} {}\0", self.mode.trim_start_matches("0"), self.name)
-        .as_bytes()
-        .to_vec();
+    let mut ret = format!(
+      "{} {}\0",
+      self.mode.trim_start_matches("0"),
+      self.path.file_name().unwrap().to_string_lossy(),
+    )
+    .as_bytes()
+    .to_vec();
     ret.extend(hex::decode(&self.sha).unwrap());
     ret
   }
@@ -193,29 +209,41 @@ impl TreeEntry {
   pub fn from_path(path: &PathBuf) -> Result<Self> {
     use std::fs::File;
     use std::io::BufReader;
+    use std::os::unix::fs::PermissionsExt;
 
-    let mut content = vec![];
+    let meta = path.metadata()?;
+    let perms = meta.permissions();
+
+    let mode = if perms.mode() & 0o111 != 0 {
+      "100755"
+    } else {
+      "100644"
+    };
+
+    // read this file, but don't slurp the whole thing into memory
+    // let mut content = vec![];
     let mut reader = BufReader::new(File::open(&path)?);
-    reader.read_to_end(&mut content)?;
+    let mut sha = Sha1::new();
 
-    let blob = Blob::from_content(content);
+    sha.update(format!("blob {}\0", meta.len()).as_bytes());
 
-    let mut mode = "100644";
+    loop {
+      let buf = reader.fill_buf()?;
+      let len = buf.len();
 
-    if let Ok(meta) = path.metadata() {
-      use std::os::unix::fs::PermissionsExt;
-      let perms = meta.permissions();
-      if perms.mode() & 0o111 != 0 {
-        mode = "100755";
+      // EOF
+      if len == 0 {
+        break;
       }
+
+      sha.update(&buf);
+      reader.consume(len);
     }
 
     Ok(TreeEntry {
+      path: path.clone(),
       mode: mode.to_string(),
-      name: path.file_name().unwrap().to_string_lossy().to_string(),
-      sha:  blob.sha().hexdigest(),
-      kind: "blob".to_string(),
-      path: Some(path.clone()),
+      sha:  sha.hexdigest(),
     })
   }
 }

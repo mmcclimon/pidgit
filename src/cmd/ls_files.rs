@@ -1,5 +1,6 @@
 use clap::{App, ArgMatches};
 
+use crate::object::TreeEntry;
 use crate::prelude::*;
 
 pub fn app<'a, 'b>() -> App<'a, 'b> {
@@ -11,7 +12,8 @@ pub fn run(_matches: &ArgMatches) -> Result<()> {
   let repo = util::find_repo()?;
 
   for entry in repo.list_files()? {
-    println!("{}", entry.display());
+    let te = TreeEntry::from_path(&entry);
+    println!("{:?}", te);
   }
 
   Ok(())
