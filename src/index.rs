@@ -1,9 +1,11 @@
 use std::fmt;
 use std::fs::File;
 use std::io::{prelude::*, Cursor};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::prelude::*;
+
+const MAX_PATH_SIZE: usize = 0xfff;
 
 #[derive(Debug)]
 pub struct Index {
@@ -191,6 +193,41 @@ impl Index {
       version,
       num_entries,
       entries,
+    })
+  }
+}
+
+impl IndexEntry {
+  pub fn new(path: &PathBuf) -> Result<Self> {
+    use std::os::unix::fs::MetadataExt;
+    let meta = path.metadata()?;
+
+    let name = path.to_string_lossy().into_owned();
+    let namelen = name.len();
+
+    if namelen > MAX_PATH_SIZE {
+      panic!("uh oh, path size is too big");
+    }
+
+    // TODO: Figure out flags; for now, I think storing just the name length is
+    // sufficient. I think eventually I will want some sort of bitvector here.
+    let mut flags = 0u16;
+    flags = flags | (namelen as u16);
+
+    Ok(IndexEntry {
+      ctime_sec: meta.ctime() as u32,
+      ctime_nano: meta.ctime_nsec() as u32,
+      mtime_sec: meta.mtime() as u32,
+      mtime_nano: meta.mtime_nsec() as u32,
+      dev: meta.dev() as u32,
+      ino: meta.ino() as u32,
+      mode: meta.mode(),
+      uid: meta.uid(),
+      gid: meta.gid(),
+      size: meta.size() as u32,
+      sha: util::compute_sha_for_path(path)?.hexdigest(),
+      flags,
+      name,
     })
   }
 }

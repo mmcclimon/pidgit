@@ -1,7 +1,5 @@
-use sha1::Sha1;
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::io::prelude::*;
 use std::path::PathBuf;
 
 // use crate::object::Blob;
@@ -177,12 +175,9 @@ impl PathEntry {
   }
 
   pub fn from_path(path: &PathBuf) -> Result<Self> {
-    use std::fs::File;
-    use std::io::BufReader;
     use std::os::unix::fs::PermissionsExt;
 
-    let meta = path.metadata()?;
-    let perms = meta.permissions();
+    let perms = path.metadata()?.permissions();
 
     let mode = if perms.mode() & 0o111 != 0 {
       "100755"
@@ -190,24 +185,7 @@ impl PathEntry {
       "100644"
     };
 
-    // read this file, but don't slurp the whole thing into memory
-    let mut reader = BufReader::new(File::open(&path)?);
-    let mut sha = Sha1::new();
-
-    sha.update(format!("blob {}\0", meta.len()).as_bytes());
-
-    loop {
-      let buf = reader.fill_buf()?;
-      let len = buf.len();
-
-      // EOF
-      if len == 0 {
-        break;
-      }
-
-      sha.update(&buf);
-      reader.consume(len);
-    }
+    let sha = util::compute_sha_for_path(path)?;
 
     Ok(PathEntry {
       path: path.clone(),

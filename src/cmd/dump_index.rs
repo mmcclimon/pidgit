@@ -1,5 +1,7 @@
 use clap::{App, ArgMatches};
+use std::path::PathBuf;
 
+use crate::index::IndexEntry;
 use crate::prelude::*;
 
 pub fn app<'a, 'b>() -> App<'a, 'b> {
