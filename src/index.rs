@@ -10,9 +10,8 @@ const MAX_PATH_SIZE: usize = 0xfff;
 
 #[derive(Debug)]
 pub struct Index {
-  version:     u32,
-  num_entries: u32,
-  entries:     BTreeMap<String, IndexEntry>,
+  version: u32,
+  entries: BTreeMap<String, IndexEntry>,
 }
 
 #[allow(unused)]
@@ -193,11 +192,7 @@ impl Index {
       // break; // until parsing done
     }
 
-    Ok(Index {
-      version,
-      num_entries,
-      entries,
-    })
+    Ok(Index { version, entries })
   }
 
   pub fn write<P>(&self, path: P) -> Result<()>
@@ -207,18 +202,32 @@ impl Index {
     // TODO: flock this or something
     let f = OpenOptions::new().write(true).create(true).open(path)?;
     let mut writer = BufWriter::new(f);
+    let mut sha = sha1::Sha1::new();
 
-    writer.write("DIRC".as_bytes())?;
-    writer.write(&2u32.to_be_bytes())?;
-    writer.write(&self.num_entries.to_be_bytes())?;
+    let mut header: Vec<u8> = Vec::with_capacity(12);
+    header.extend("DIRC".as_bytes());
+    header.extend(2u32.to_be_bytes().iter());
+    header.extend(self.num_entries().to_be_bytes().iter());
+
+    writer.write(&header)?;
+    sha.update(&header);
 
     for entry in self.entries.values() {
-      writer.write(&entry.as_bytes())?;
+      let bytes = entry.as_bytes();
+      writer.write(&bytes)?;
+      sha.update(&bytes);
     }
+
+    // last 20 bytes is the sha of this content
+    writer.write(&sha.digest().bytes())?;
 
     writer.flush()?;
 
     Ok(())
+  }
+
+  pub fn num_entries(&self) -> u32 {
+    self.entries.len() as u32
   }
 }
 

@@ -237,6 +237,10 @@ impl Repository {
     Index::from_path(self.git_dir().join("index"))
   }
 
+  pub fn write_index(&self, index: &Index) -> Result<()> {
+    index.write(self.git_dir().join("index"))
+  }
+
   pub fn as_tree(&self) -> Result<Tree> {
     use crate::object::PathEntry;
 
