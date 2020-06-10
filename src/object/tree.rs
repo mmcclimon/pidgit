@@ -10,8 +10,9 @@ use crate::prelude::*;
 
 #[derive(Debug)]
 pub struct Tree {
-  entries: BTreeMap<PathBuf, TreeItem>,
-  label:   String,
+  entries:      BTreeMap<PathBuf, TreeItem>,
+  label:        String,
+  ordered_keys: Vec<PathBuf>,
 }
 
 // meh, these names. A tree *item* is an element of a tree, which is either
@@ -35,9 +36,9 @@ pub struct PathEntry {
 impl GitObject for Tree {
   fn raw_content(&self) -> Vec<u8> {
     self
-      .entries
-      .values()
-      .flat_map(|e| e.as_entry_bytes())
+      .ordered_keys
+      .iter()
+      .flat_map(|k| self.entries.get(k).unwrap().as_entry_bytes())
       .collect()
   }
 
@@ -47,26 +48,26 @@ impl GitObject for Tree {
 
   fn pretty(&self) -> Vec<u8> {
     self
-      .entries
+      .ordered_keys
       .iter()
-      .map(|(path, item)| match item {
-        TreeItem::Tree(tree) => {
-          let name = path.file_name().unwrap().to_string_lossy();
-          format!(
+      .map(|key| {
+        let item = self.entries.get(key).unwrap();
+        match item {
+          TreeItem::Tree(tree) => format!(
             "{} {} {}    {}",
             "040000",
             "tree",
             tree.sha().hexdigest(),
-            name,
-          )
-        },
-        TreeItem::Entry(e) => format!(
-          "{} {} {}    {}",
-          e.mode,
-          "blob",
-          e.sha,
-          e.path.file_name().unwrap().to_string_lossy(),
-        ),
+            tree.label,
+          ),
+          TreeItem::Entry(e) => format!(
+            "{} {} {}    {}",
+            e.mode,
+            "blob",
+            e.sha,
+            e.path.file_name().unwrap().to_string_lossy(),
+          ),
+        }
       })
       .collect::<Vec<_>>()
       .join("\n")
@@ -80,6 +81,7 @@ impl Tree {
     Self {
       entries: BTreeMap::new(),
       label,
+      ordered_keys: vec![],
     }
   }
 
@@ -175,7 +177,9 @@ impl Tree {
     todo!("account for hashmap entries")
   }
 
-  pub fn build(entries: Vec<PathEntry>) -> Self {
+  pub fn build(mut entries: Vec<PathEntry>) -> Self {
+    entries.sort_unstable();
+
     let mut root = Tree::new("".to_string());
 
     for entry in entries {
@@ -189,6 +193,7 @@ impl Tree {
   pub fn add_entry(&mut self, parents: &[PathBuf], entry: PathEntry) {
     if parents.is_empty() {
       // let basename = entry.path.file_name().unwrap().to_os_string();
+      self.ordered_keys.push(entry.path.clone());
       self
         .entries
         .insert(entry.path.clone(), TreeItem::Entry(entry));
@@ -200,6 +205,7 @@ impl Tree {
 
     if !self.entries.contains_key(&key) {
       let label = key.file_name().unwrap().to_string_lossy();
+      self.ordered_keys.push(key.clone());
       self
         .entries
         .insert(key.clone(), TreeItem::Tree(Tree::new(label.into_owned())));
@@ -358,13 +364,15 @@ impl PathEntry {
 
 impl PartialOrd for PathEntry {
   fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-    self.path.partial_cmp(&other.path)
+    // git compares files a little weirdly, so we must coerce to strings
+    format!("{}", self.path.display())
+      .partial_cmp(&format!("{}", other.path.display()))
   }
 }
 
 impl Ord for PathEntry {
   fn cmp(&self, other: &Self) -> Ordering {
-    self.path.cmp(&other.path)
+    format!("{}", self.path.display()).cmp(&format!("{}", other.path.display()))
   }
 }
 
