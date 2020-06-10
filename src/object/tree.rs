@@ -1,7 +1,6 @@
 use sha1::Sha1;
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
-use std::ffi::OsString;
+use std::collections::HashMap;
 use std::io::prelude::*;
 use std::path::PathBuf;
 
@@ -10,7 +9,7 @@ use crate::prelude::*;
 
 #[derive(Debug)]
 pub struct Tree {
-  entries:      BTreeMap<PathBuf, TreeItem>,
+  entries:      HashMap<PathBuf, TreeItem>,
   label:        String,
   ordered_keys: Vec<PathBuf>,
 }
@@ -79,7 +78,7 @@ impl GitObject for Tree {
 impl Tree {
   pub fn new(label: String) -> Self {
     Self {
-      entries: BTreeMap::new(),
+      entries: HashMap::new(),
       label,
       ordered_keys: vec![],
     }
@@ -112,74 +111,20 @@ impl Tree {
 
       let mode_str = format!("{:0>6}", String::from_utf8(mode).expect(err));
 
-      // let entry_type = match &mode_str[..3] {
-      //   "040" => "tree",
-      //   "100" => "blob",
-      //   "120" => "blob", // symlink
-      //   _ => "????",
-      // };
-
       let p = String::from_utf8_lossy(&filename);
 
       entries.push(PathEntry {
         mode: mode_str,
-        // kind: entry_type.to_string(),
-        // name: String::from_utf8_lossy(&filename).to_string(), // improve me
         sha:  hex::encode(sha),
         path: PathBuf::from(p.to_string()),
       });
     }
 
-    // Self { entries }
-    todo!("implement this correctly");
+    Self::build(entries)
   }
 
-  pub fn from_path(base: &PathBuf) -> Result<Self> {
-    // hard-coding the ignores for now...
-    use std::collections::HashSet;
-    let mut ignore: HashSet<OsString> = HashSet::new();
-    ignore.insert(".git".into());
-    ignore.insert(".pidgit".into());
-    ignore.insert("target".into());
-    ignore.insert(".DS_Store".into());
-
-    let mut ftignore: HashSet<OsString> = HashSet::new();
-    ftignore.insert("swp".into());
-    ftignore.insert("swo".into());
-
-    let mut dir_entries = std::fs::read_dir(base)?
-      .filter_map(std::result::Result::ok)
-      .map(|e| e.path())
-      .collect::<Vec<_>>();
-
-    dir_entries.sort();
-
-    let mut entries = vec![];
-
-    for path in dir_entries {
-      if ignore.contains(path.file_name().unwrap()) {
-        continue;
-      }
-
-      if let Some(ext) = path.extension() {
-        if ftignore.contains(ext) {
-          continue;
-        }
-      }
-
-      let e = Self::entry_for_path(&path)?;
-      entries.push(e);
-    }
-
-    // println!("{:?}", entries);
-
-    // Ok(Self { entries })
-    todo!("account for hashmap entries")
-  }
-
-  pub fn build(mut entries: Vec<PathEntry>) -> Self {
-    entries.sort_unstable();
-
+  // assumes entries are correctly sorted!
+  pub fn build(entries: Vec<PathEntry>) -> Self {
     let mut root = Tree::new("".to_string());
 
     for entry in entries {
@@ -235,21 +180,6 @@ impl Tree {
     ret
   }
 
-  fn entry_for_path(path: &PathBuf) -> Result<PathEntry> {
-    if path.is_dir() {
-      let tree = Self::from_path(&path)?;
-      Ok(PathEntry {
-        mode: "040000".to_string(), // todo
-        // name: path.file_name().unwrap().to_string_lossy().to_string(),
-        sha:  tree.sha().hexdigest(),
-        // kind: tree.type_str().to_string(),
-        path: path.clone(),
-      })
-    } else {
-      PathEntry::from_path(&path)
-    }
-  }
-
   pub fn write(&self, _repo: &Repository) -> Result<()> {
     todo!("re-implement with new entry abstraction");
 
@@ -301,7 +231,6 @@ impl PathEntry {
     ret
   }
 
-  // XXX poorly named: only works on blobs
   pub fn from_path(path: &PathBuf) -> Result<Self> {
     use std::fs::File;
     use std::io::BufReader;
