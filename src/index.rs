@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fmt;
 use std::fs::{File, OpenOptions};
 use std::io::{prelude::*, BufWriter, Cursor};
@@ -11,7 +12,7 @@ const MAX_PATH_SIZE: usize = 0xfff;
 pub struct Index {
   version:     u32,
   num_entries: u32,
-  entries:     Vec<IndexEntry>,
+  entries:     BTreeMap<String, IndexEntry>,
 }
 
 #[allow(unused)]
@@ -87,7 +88,7 @@ impl Index {
     let num_entries = u32::from_be_bytes(buf32);
 
     // A number of sorted index entries
-    let mut entries = Vec::with_capacity(num_entries as usize);
+    let mut entries = BTreeMap::new();
 
     // Index entry
     // Index entries are sorted in ascending order on the name field,
@@ -170,21 +171,24 @@ impl Index {
         reader.seek(std::io::SeekFrom::Current(padding as i64))?;
       }
 
-      entries.push(IndexEntry {
-        ctime_sec,
-        ctime_nano,
-        mtime_sec,
-        mtime_nano,
-        dev,
-        ino,
-        mode,
-        uid,
-        gid,
-        size,
-        sha: hex::encode(sha),
-        flags,
-        name,
-      });
+      entries.insert(
+        name.clone(),
+        IndexEntry {
+          ctime_sec,
+          ctime_nano,
+          mtime_sec,
+          mtime_nano,
+          dev,
+          ino,
+          mode,
+          uid,
+          gid,
+          size,
+          sha: hex::encode(sha),
+          flags,
+          name,
+        },
+      );
 
       // break; // until parsing done
     }
@@ -208,7 +212,7 @@ impl Index {
     writer.write(&2u32.to_be_bytes())?;
     writer.write(&self.num_entries.to_be_bytes())?;
 
-    for entry in &self.entries {
+    for entry in self.entries.values() {
       writer.write(&entry.as_bytes())?;
     }
 
