@@ -1,6 +1,7 @@
 use clap::{App, ArgMatches};
+use std::io::prelude::*;
 
-use crate::object::{Tree, TreeEntry};
+use crate::object::{PathEntry, Tree};
 use crate::prelude::*;
 
 pub fn app<'a, 'b>() -> App<'a, 'b> {
@@ -14,12 +15,16 @@ pub fn run(_matches: &ArgMatches) -> Result<()> {
   let entries = repo
     .list_files()?
     .iter()
-    .filter_map(|entry| TreeEntry::from_path(&entry).ok())
+    .filter_map(|entry| PathEntry::from_path(&entry).ok())
     .collect::<Vec<_>>();
 
   let t = Tree::build(entries);
 
-  t.traverse(&|tree| println!("{:?}", tree));
+  t.traverse(&|tree| {
+    let mut stdout = std::io::stdout();
+    stdout.write_all(&tree.pretty()).unwrap();
+    stdout.write(b"\n\n").unwrap();
+  });
 
   // println!("{:#?}", t);
 

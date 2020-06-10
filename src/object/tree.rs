@@ -11,18 +11,22 @@ use crate::prelude::*;
 #[derive(Debug)]
 pub struct Tree {
   entries: BTreeMap<PathBuf, TreeItem>,
+  label:   String,
 }
+
+// meh, these names. A tree *item* is an element of a tree, which is either
+// another tree or a path. A tree
 
 #[derive(Debug)]
 pub enum TreeItem {
   Tree(Tree),
-  Entry(TreeEntry),
+  Entry(PathEntry),
 }
 
 // I would like these to be &str, which I think could work, but I need to work
 // out the lifetimes.
 #[derive(Debug)]
-pub struct TreeEntry {
+pub struct PathEntry {
   path: PathBuf,
   mode: String,
   sha:  String,
@@ -30,8 +34,11 @@ pub struct TreeEntry {
 
 impl GitObject for Tree {
   fn raw_content(&self) -> Vec<u8> {
-    todo!("fixme")
-    // self.entries.iter().flat_map(|e| e.as_bytes()).collect()
+    self
+      .entries
+      .values()
+      .flat_map(|e| e.as_entry_bytes())
+      .collect()
   }
 
   fn type_str(&self) -> &str {
@@ -39,32 +46,40 @@ impl GitObject for Tree {
   }
 
   fn pretty(&self) -> Vec<u8> {
-    todo!("account for hashmap")
-    /*
     self
       .entries
-      .values()
-      .map(|e| {
-        format!(
+      .iter()
+      .map(|(path, item)| match item {
+        TreeItem::Tree(tree) => {
+          let name = path.file_name().unwrap().to_string_lossy();
+          format!(
+            "{} {} {}    {}",
+            "040000",
+            "tree",
+            tree.sha().hexdigest(),
+            name,
+          )
+        },
+        TreeItem::Entry(e) => format!(
           "{} {} {}    {}",
           e.mode,
           "blob",
           e.sha,
           e.path.file_name().unwrap().to_string_lossy(),
-        )
+        ),
       })
       .collect::<Vec<_>>()
       .join("\n")
       .as_bytes()
       .to_vec()
-    */
   }
 }
 
 impl Tree {
-  pub fn new() -> Self {
+  pub fn new(label: String) -> Self {
     Self {
       entries: BTreeMap::new(),
+      label,
     }
   }
 
@@ -104,7 +119,7 @@ impl Tree {
 
       let p = String::from_utf8_lossy(&filename);
 
-      entries.push(TreeEntry {
+      entries.push(PathEntry {
         mode: mode_str,
         // kind: entry_type.to_string(),
         // name: String::from_utf8_lossy(&filename).to_string(), // improve me
@@ -160,8 +175,8 @@ impl Tree {
     todo!("account for hashmap entries")
   }
 
-  pub fn build(entries: Vec<TreeEntry>) -> Self {
-    let mut root = Tree::new();
+  pub fn build(entries: Vec<PathEntry>) -> Self {
+    let mut root = Tree::new("".to_string());
 
     for entry in entries {
       let parents = entry.parents();
@@ -171,7 +186,7 @@ impl Tree {
     root
   }
 
-  pub fn add_entry(&mut self, parents: &[PathBuf], entry: TreeEntry) {
+  pub fn add_entry(&mut self, parents: &[PathBuf], entry: PathEntry) {
     if parents.is_empty() {
       // let basename = entry.path.file_name().unwrap().to_os_string();
       self
@@ -184,9 +199,10 @@ impl Tree {
     let key = parents[0].clone();
 
     if !self.entries.contains_key(&key) {
+      let label = key.file_name().unwrap().to_string_lossy();
       self
         .entries
-        .insert(key.clone(), TreeItem::Tree(Tree::new()));
+        .insert(key.clone(), TreeItem::Tree(Tree::new(label.into_owned())));
     }
 
     if let TreeItem::Tree(tree) = self.entries.get_mut(&key).unwrap() {
@@ -207,10 +223,16 @@ impl Tree {
     f(self)
   }
 
-  fn entry_for_path(path: &PathBuf) -> Result<TreeEntry> {
+  pub fn as_entry_bytes(&self) -> Vec<u8> {
+    let mut ret = format!("40000 {}\0", self.label).as_bytes().to_vec();
+    ret.extend(self.sha().digest().bytes().iter());
+    ret
+  }
+
+  fn entry_for_path(path: &PathBuf) -> Result<PathEntry> {
     if path.is_dir() {
       let tree = Self::from_path(&path)?;
-      Ok(TreeEntry {
+      Ok(PathEntry {
         mode: "040000".to_string(), // todo
         // name: path.file_name().unwrap().to_string_lossy().to_string(),
         sha:  tree.sha().hexdigest(),
@@ -218,7 +240,7 @@ impl Tree {
         path: path.clone(),
       })
     } else {
-      TreeEntry::from_path(&path)
+      PathEntry::from_path(&path)
     }
   }
 
@@ -250,7 +272,7 @@ impl Tree {
         }
       } else {
         return Err(PidgitError::Generic(
-          "cannot recurse on TreeEntry with no path".to_string(),
+          "cannot recurse on PathEntry with no path".to_string(),
         ));
       }
     }
@@ -260,8 +282,8 @@ impl Tree {
   }
 }
 
-impl TreeEntry {
-  pub fn as_bytes(&self) -> Vec<u8> {
+impl PathEntry {
+  pub fn as_entry_bytes(&self) -> Vec<u8> {
     let mut ret = format!(
       "{} {}\0",
       self.mode.trim_start_matches("0"),
@@ -307,7 +329,7 @@ impl TreeEntry {
       reader.consume(len);
     }
 
-    Ok(TreeEntry {
+    Ok(PathEntry {
       path: path.clone(),
       mode: mode.to_string(),
       sha:  sha.hexdigest(),
@@ -327,23 +349,37 @@ impl TreeEntry {
 
     parents
   }
+
+  // NB this is a string, not a Sha1!
+  pub fn sha(&self) -> &str {
+    &self.sha
+  }
 }
 
-impl PartialOrd for TreeEntry {
+impl PartialOrd for PathEntry {
   fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
     self.path.partial_cmp(&other.path)
   }
 }
 
-impl Ord for TreeEntry {
+impl Ord for PathEntry {
   fn cmp(&self, other: &Self) -> Ordering {
     self.path.cmp(&other.path)
   }
 }
 
-impl Eq for TreeEntry {}
-impl PartialEq for TreeEntry {
+impl Eq for PathEntry {}
+impl PartialEq for PathEntry {
   fn eq(&self, other: &Self) -> bool {
     self.path == other.path && self.mode == other.mode
+  }
+}
+
+impl TreeItem {
+  pub fn as_entry_bytes(&self) -> Vec<u8> {
+    match self {
+      TreeItem::Tree(t) => t.as_entry_bytes(),
+      TreeItem::Entry(e) => e.as_entry_bytes(),
+    }
   }
 }
