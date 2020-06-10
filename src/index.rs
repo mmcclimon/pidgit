@@ -226,6 +226,10 @@ impl Index {
     Ok(())
   }
 
+  pub fn add(&mut self, entry: IndexEntry) {
+    self.entries.insert(entry.name.clone(), entry);
+  }
+
   pub fn num_entries(&self) -> u32 {
     self.entries.len() as u32
   }

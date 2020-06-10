@@ -1,6 +1,7 @@
 use crate::prelude::*;
 use clap::ArgMatches;
 
+mod add;
 mod cat_file;
 mod commit;
 mod dump_index;
@@ -14,6 +15,7 @@ pub type App = clap::App<'static, 'static>;
 
 pub fn command_apps() -> impl IntoIterator<Item = App> {
   vec![
+    add::app(),
     cat_file::app(),
     commit::app(),
     dump_index::app(),
@@ -27,6 +29,7 @@ pub fn command_apps() -> impl IntoIterator<Item = App> {
 
 pub fn dispatch(app_matches: &ArgMatches) -> Result<()> {
   match app_matches.subcommand() {
+    ("add", Some(matches)) => add::run(matches),
     ("cat-file", Some(matches)) => cat_file::run(matches),
     ("commit", Some(matches)) => commit::run(matches),
     ("dump-index", Some(matches)) => dump_index::run(matches),
