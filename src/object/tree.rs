@@ -49,25 +49,7 @@ impl GitObject for Tree {
     self
       .ordered_keys
       .iter()
-      .map(|key| {
-        let item = self.entries.get(key).unwrap();
-        match item {
-          TreeItem::Tree(tree) => format!(
-            "{} {} {}    {}",
-            "040000",
-            "tree",
-            tree.sha().hexdigest(),
-            tree.label,
-          ),
-          TreeItem::Entry(e) => format!(
-            "{} {} {}    {}",
-            e.mode,
-            "blob",
-            e.sha,
-            e.path.file_name().unwrap().to_string_lossy(),
-          ),
-        }
-      })
+      .map(|key| self.entries.get(key).unwrap().pretty())
       .collect::<Vec<_>>()
       .join("\n")
       .as_bytes()
@@ -280,6 +262,25 @@ impl TreeItem {
     match self {
       TreeItem::Tree(t) => t.as_entry_bytes(),
       TreeItem::Entry(e) => e.as_entry_bytes(),
+    }
+  }
+
+  pub fn pretty(&self) -> String {
+    match self {
+      TreeItem::Tree(tree) => format!(
+        "{} {} {}    {}",
+        "040000",
+        "tree",
+        tree.sha().hexdigest(),
+        tree.label,
+      ),
+      TreeItem::Entry(e) => format!(
+        "{} {} {}    {}",
+        e.mode,
+        "blob",
+        e.sha,
+        e.path.file_name().unwrap().to_string_lossy(),
+      ),
     }
   }
 }
