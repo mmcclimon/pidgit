@@ -161,13 +161,13 @@ impl Tree {
     }
   }
 
-  pub fn traverse<F>(&self, f: &F)
+  pub fn traverse<F>(&self, f: &F) -> Result<()>
   where
-    F: Fn(&Tree),
+    F: Fn(&Tree) -> Result<()>,
   {
     for item in self.entries.values() {
       if let TreeItem::Tree(tree) = item {
-        tree.traverse(f);
+        tree.traverse(f)?;
       }
     }
 
@@ -178,43 +178,6 @@ impl Tree {
     let mut ret = format!("40000 {}\0", self.label).as_bytes().to_vec();
     ret.extend(self.sha().digest().bytes().iter());
     ret
-  }
-
-  pub fn write(&self, _repo: &Repository) -> Result<()> {
-    todo!("re-implement with new entry abstraction");
-
-    /*
-    for e in &self.entries {
-      let git_path = repo.path_for_sha(&e.sha);
-      if git_path.is_file() {
-        // println!("have {} {}", e.kind, e.name);
-        continue;
-      }
-
-
-      if let Some(ref path) = e.path {
-        match e.kind.as_str() {
-          "blob" => {
-            // println!("need to write blob {}", e.name);
-            let blob = Blob::from_path(path)?;
-            repo.write_object(&blob)?;
-          },
-          "tree" => {
-            // println!("need to write tree: {}", e.name);
-            let t = Self::from_path(path)?;
-            t.write(repo)?;
-          },
-          _ => panic!("unknown type!"),
-        }
-      } else {
-        return Err(PidgitError::Generic(
-          "cannot recurse on PathEntry with no path".to_string(),
-        ));
-      }
-    }
-
-    repo.write_object(self)
-    */
   }
 }
 

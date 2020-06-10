@@ -250,7 +250,8 @@ impl Repository {
   }
 
   pub fn write_tree(&self) -> Result<()> {
-    self.as_tree()?.write(&self)
+    let t = self.as_tree()?;
+    t.traverse(&|tree| self.write_object(tree))
   }
 
   pub fn update_head(&self, new_sha: &Sha1) -> Result<()> {
