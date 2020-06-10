@@ -1,4 +1,7 @@
 use sha1::Sha1;
+use std::cmp::Ordering;
+use std::collections::BTreeMap;
+use std::ffi::OsString;
 use std::io::prelude::*;
 use std::path::PathBuf;
 
@@ -7,7 +10,13 @@ use crate::prelude::*;
 
 #[derive(Debug)]
 pub struct Tree {
-  entries: Vec<TreeEntry>,
+  entries: BTreeMap<PathBuf, TreeItem>,
+}
+
+#[derive(Debug)]
+pub enum TreeItem {
+  Tree(Tree),
+  Entry(TreeEntry),
 }
 
 // I would like these to be &str, which I think could work, but I need to work
@@ -21,7 +30,8 @@ pub struct TreeEntry {
 
 impl GitObject for Tree {
   fn raw_content(&self) -> Vec<u8> {
-    self.entries.iter().flat_map(|e| e.as_bytes()).collect()
+    todo!("fixme")
+    // self.entries.iter().flat_map(|e| e.as_bytes()).collect()
   }
 
   fn type_str(&self) -> &str {
@@ -29,9 +39,11 @@ impl GitObject for Tree {
   }
 
   fn pretty(&self) -> Vec<u8> {
+    todo!("account for hashmap")
+    /*
     self
       .entries
-      .iter()
+      .values()
       .map(|e| {
         format!(
           "{} {} {}    {}",
@@ -45,10 +57,17 @@ impl GitObject for Tree {
       .join("\n")
       .as_bytes()
       .to_vec()
+    */
   }
 }
 
 impl Tree {
+  pub fn new() -> Self {
+    Self {
+      entries: BTreeMap::new(),
+    }
+  }
+
   pub fn from_content(content: Vec<u8>) -> Self {
     use std::io::prelude::*;
     use std::io::Cursor;
@@ -94,13 +113,13 @@ impl Tree {
       });
     }
 
-    Self { entries }
+    // Self { entries }
+    todo!("implement this correctly");
   }
 
   pub fn from_path(base: &PathBuf) -> Result<Self> {
     // hard-coding the ignores for now...
     use std::collections::HashSet;
-    use std::ffi::OsString;
     let mut ignore: HashSet<OsString> = HashSet::new();
     ignore.insert(".git".into());
     ignore.insert(".pidgit".into());
@@ -137,7 +156,55 @@ impl Tree {
 
     // println!("{:?}", entries);
 
-    Ok(Self { entries })
+    // Ok(Self { entries })
+    todo!("account for hashmap entries")
+  }
+
+  pub fn build(entries: Vec<TreeEntry>) -> Self {
+    let mut root = Tree::new();
+
+    for entry in entries {
+      let parents = entry.parents();
+      root.add_entry(&parents, entry);
+    }
+
+    root
+  }
+
+  pub fn add_entry(&mut self, parents: &[PathBuf], entry: TreeEntry) {
+    if parents.is_empty() {
+      // let basename = entry.path.file_name().unwrap().to_os_string();
+      self
+        .entries
+        .insert(entry.path.clone(), TreeItem::Entry(entry));
+      return;
+    }
+
+    // recurse
+    let key = parents[0].clone();
+
+    if !self.entries.contains_key(&key) {
+      self
+        .entries
+        .insert(key.clone(), TreeItem::Tree(Tree::new()));
+    }
+
+    if let TreeItem::Tree(tree) = self.entries.get_mut(&key).unwrap() {
+      tree.add_entry(&parents[1..], entry);
+    }
+  }
+
+  pub fn traverse<F>(&self, f: &F)
+  where
+    F: Fn(&Tree),
+  {
+    for item in self.entries.values() {
+      if let TreeItem::Tree(tree) = item {
+        tree.traverse(f);
+      }
+    }
+
+    f(self)
   }
 
   fn entry_for_path(path: &PathBuf) -> Result<TreeEntry> {
@@ -155,7 +222,10 @@ impl Tree {
     }
   }
 
-  pub fn write(&self, repo: &Repository) -> Result<()> {
+  pub fn write(&self, _repo: &Repository) -> Result<()> {
+    todo!("re-implement with new entry abstraction");
+
+    /*
     for e in &self.entries {
       let git_path = repo.path_for_sha(&e.sha);
       if git_path.is_file() {
@@ -163,9 +233,7 @@ impl Tree {
         continue;
       }
 
-      todo!("re-implement with new entry abstraction");
 
-      /*
       if let Some(ref path) = e.path {
         match e.kind.as_str() {
           "blob" => {
@@ -185,10 +253,10 @@ impl Tree {
           "cannot recurse on TreeEntry with no path".to_string(),
         ));
       }
-      */
     }
 
     repo.write_object(self)
+    */
   }
 }
 
@@ -221,7 +289,6 @@ impl TreeEntry {
     };
 
     // read this file, but don't slurp the whole thing into memory
-    // let mut content = vec![];
     let mut reader = BufReader::new(File::open(&path)?);
     let mut sha = Sha1::new();
 
@@ -245,5 +312,38 @@ impl TreeEntry {
       mode: mode.to_string(),
       sha:  sha.hexdigest(),
     })
+  }
+
+  pub fn parents(&self) -> Vec<PathBuf> {
+    let mut parents = self
+      .path
+      .ancestors()
+      .skip(1)
+      .map(|p| p.to_path_buf())
+      .collect::<Vec<_>>();
+
+    parents.pop(); // remove empty path
+    parents.reverse();
+
+    parents
+  }
+}
+
+impl PartialOrd for TreeEntry {
+  fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    self.path.partial_cmp(&other.path)
+  }
+}
+
+impl Ord for TreeEntry {
+  fn cmp(&self, other: &Self) -> Ordering {
+    self.path.cmp(&other.path)
+  }
+}
+
+impl Eq for TreeEntry {}
+impl PartialEq for TreeEntry {
+  fn eq(&self, other: &Self) -> bool {
+    self.path == other.path && self.mode == other.mode
   }
 }
