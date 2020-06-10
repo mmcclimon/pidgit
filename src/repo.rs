@@ -238,7 +238,15 @@ impl Repository {
   }
 
   pub fn as_tree(&self) -> Result<Tree> {
-    Tree::from_path(&self.work_tree)
+    use crate::object::PathEntry;
+
+    let entries = self
+      .list_files()?
+      .iter()
+      .filter_map(|entry| PathEntry::from_path(&entry).ok())
+      .collect::<Vec<_>>();
+
+    Ok(Tree::build(entries))
   }
 
   pub fn write_tree(&self) -> Result<()> {
@@ -293,7 +301,9 @@ impl Repository {
       }
     }
 
-    dir_entries.sort_unstable();
+    dir_entries.sort_unstable_by(|a, b| {
+      format!("{}", a.display()).cmp(&format!("{}", b.display()))
+    });
 
     Ok(dir_entries)
   }
