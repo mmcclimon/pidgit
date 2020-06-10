@@ -282,8 +282,16 @@ impl Repository {
     self.list_files_from_base(&self.work_tree)
   }
 
-  fn list_files_from_base(&self, base: &PathBuf) -> Result<Vec<PathBuf>> {
+  pub fn list_files_from_base(&self, base: &PathBuf) -> Result<Vec<PathBuf>> {
     let mut dir_entries = vec![];
+
+    let relativize =
+      |p: &PathBuf| p.strip_prefix(&self.work_tree).unwrap().to_path_buf();
+
+    if base.is_file() {
+      dir_entries.push(relativize(base));
+      return Ok(dir_entries);
+    }
 
     for e in std::fs::read_dir(base)?.filter_map(std::result::Result::ok) {
       let path = e.path();
@@ -301,8 +309,7 @@ impl Repository {
       if path.is_dir() {
         dir_entries.extend(self.list_files_from_base(&path)?);
       } else {
-        dir_entries
-          .push(path.strip_prefix(&self.work_tree).unwrap().to_path_buf());
+        dir_entries.push(relativize(&path));
       }
     }
 

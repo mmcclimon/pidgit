@@ -19,14 +19,16 @@ pub fn run(matches: &ArgMatches) -> Result<()> {
   let mut index = repo.index()?;
 
   for raw_path in matches.values_of("pathspec").unwrap() {
-    let path = PathBuf::from(raw_path);
+    let base = PathBuf::from(raw_path).canonicalize()?;
 
-    let entry = IndexEntry::new(&path)?;
+    for path in repo.list_files_from_base(&base)? {
+      let entry = IndexEntry::new(&path)?;
 
-    let blob = Blob::from_path(&path)?;
-    repo.write_object(&blob)?;
+      let blob = Blob::from_path(&path)?;
+      repo.write_object(&blob)?;
 
-    index.add(entry);
+      index.add(entry);
+    }
   }
 
   repo.write_index(&index)?;
