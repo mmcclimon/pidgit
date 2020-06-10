@@ -1,7 +1,5 @@
 use clap::{App, ArgMatches};
-use std::path::PathBuf;
 
-use crate::index::IndexEntry;
 use crate::prelude::*;
 
 pub fn app<'a, 'b>() -> App<'a, 'b> {
@@ -13,6 +11,8 @@ pub fn run(_matches: &ArgMatches) -> Result<()> {
   let index = repo.index()?;
 
   println!("{:#?}", index);
+
+  index.write("fake-index")?;
 
   Ok(())
 }

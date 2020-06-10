@@ -1,6 +1,6 @@
 use std::fmt;
-use std::fs::File;
-use std::io::{prelude::*, Cursor};
+use std::fs::{File, OpenOptions};
+use std::io::{prelude::*, BufWriter, Cursor};
 use std::path::{Path, PathBuf};
 
 use crate::prelude::*;
@@ -195,6 +195,27 @@ impl Index {
       entries,
     })
   }
+
+  pub fn write<P>(&self, path: P) -> Result<()>
+  where
+    P: AsRef<Path> + fmt::Debug,
+  {
+    // TODO: flock this or something
+    let f = OpenOptions::new().write(true).create(true).open(path)?;
+    let mut writer = BufWriter::new(f);
+
+    writer.write("DIRC".as_bytes())?;
+    writer.write(&2u32.to_be_bytes())?;
+    writer.write(&self.num_entries.to_be_bytes())?;
+
+    for entry in &self.entries {
+      writer.write(&entry.as_bytes())?;
+    }
+
+    writer.flush()?;
+
+    Ok(())
+  }
 }
 
 impl IndexEntry {
@@ -221,7 +242,7 @@ impl IndexEntry {
       mtime_nano: meta.mtime_nsec() as u32,
       dev: meta.dev() as u32,
       ino: meta.ino() as u32,
-      mode: meta.mode(),
+      mode: meta.mode(), // XXX is this right?
       uid: meta.uid(),
       gid: meta.gid(),
       size: meta.size() as u32,
@@ -229,5 +250,33 @@ impl IndexEntry {
       flags,
       name,
     })
+  }
+
+  pub fn as_bytes(&self) -> Vec<u8> {
+    // 64 bytes is constant, plus a filename, so allow some room for that
+    let mut ret = Vec::with_capacity(100);
+
+    // I think this is probably not very efficient.
+    ret.extend(self.ctime_sec.to_be_bytes().iter());
+    ret.extend(self.ctime_nano.to_be_bytes().iter());
+    ret.extend(self.mtime_sec.to_be_bytes().iter());
+    ret.extend(self.mtime_nano.to_be_bytes().iter());
+    ret.extend(self.dev.to_be_bytes().iter());
+    ret.extend(self.ino.to_be_bytes().iter());
+    ret.extend(self.mode.to_be_bytes().iter());
+    ret.extend(self.uid.to_be_bytes().iter());
+    ret.extend(self.gid.to_be_bytes().iter());
+    ret.extend(self.size.to_be_bytes().iter());
+    ret.extend(hex::decode(&self.sha).unwrap());
+    ret.extend(self.flags.to_be_bytes().iter());
+    ret.extend(self.name.as_bytes());
+    ret.push(0);
+
+    // 1-8 nul bytes as necessary to pad the entry to a multiple of eight bytes
+    while ret.len() % 8 > 0 {
+      ret.push(0);
+    }
+
+    ret
   }
 }
