@@ -20,6 +20,7 @@ fn cd_temp() -> Result<TempDir> {
 
 fn cmd(sub: &str) -> Result<Command> {
   let mut cmd = Command::cargo_bin(env!("CARGO_PKG_NAME"))?;
+  cmd.env_remove("PIDGIT_DIR");
   cmd.arg(sub);
   Ok(cmd)
 }
