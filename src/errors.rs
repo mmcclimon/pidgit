@@ -2,6 +2,7 @@ use std::ffi::OsString;
 use std::fmt;
 use std::io::Error as IoError;
 use std::num::ParseIntError;
+use std::path::PathBuf;
 use std::str::Utf8Error;
 use std::string::FromUtf8Error;
 
@@ -14,6 +15,7 @@ pub enum PidgitError {
   ObjectNotFound(String),
   PathspecNotFound(OsString),
   Index(String),
+  Lock(PathBuf, IoError),
 }
 
 type PE = PidgitError;
@@ -33,6 +35,7 @@ impl fmt::Display for PidgitError {
       PE::PathspecNotFound(spec) => {
         write!(f, "pathspec {:?} did not match any files", spec)
       },
+      PE::Lock(path, err) => write!(f, "could not lock {:?}: {}", path, err),
     }
   }
 }

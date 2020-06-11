@@ -392,10 +392,7 @@ impl IndexEntry {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use assert_fs::prelude::*;
-  use assert_fs::TempDir;
-  use serial_test::serial;
-  use std::collections::BTreeMap;
+  use crate::test_prelude::*;
 
   const EMPTY_SHA: &str = "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391";
 
@@ -432,7 +429,7 @@ mod tests {
   #[serial]
   #[test]
   fn entry_from_path() {
-    let dir = TempDir::new().expect("couldn't make tempdir");
+    let dir = tempdir();
     let f = dir.child("foo.txt");
     f.write_str("").unwrap();
     let entry =
