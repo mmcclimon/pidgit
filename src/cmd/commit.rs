@@ -1,7 +1,7 @@
 use chrono::Local;
 use clap::{App, Arg, ArgMatches};
 
-use crate::object::{Commit, Person};
+use crate::object::{Commit, Person, Tree};
 use crate::prelude::*;
 
 pub fn app<'a, 'b>() -> App<'a, 'b> {
@@ -38,7 +38,9 @@ pub fn run(matches: &ArgMatches) -> Result<()> {
     msg.push_str("\n");
   }
 
-  let tree = repo.as_tree()?;
+  // let tree = repo.as_tree()?;
+  let index = repo.index()?;
+  let tree = Tree::from(&index);
 
   let commit = Commit {
     tree:           tree.sha().hexdigest(),
@@ -53,7 +55,7 @@ pub fn run(matches: &ArgMatches) -> Result<()> {
 
   // we write the tree, then write the commit.
   // ...obviously, this should be improved a lot, as it's destructive.
-  repo.write_tree()?;
+  repo.write_tree(&tree)?;
   repo.write_object(&commit)?;
   repo.update_head(&commit.sha())?;
 

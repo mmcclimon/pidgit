@@ -144,7 +144,8 @@ impl Repository {
     // create parent dir!
     std::fs::create_dir_all(path.parent().unwrap())?;
 
-    let file = File::create(path)?;
+    let file = File::create(&path)
+      .expect(&format!("error creating path {}", path.display()));
 
     let mut e = ZlibEncoder::new(file, Compression::default());
 
@@ -253,9 +254,8 @@ impl Repository {
     Ok(Tree::build(entries))
   }
 
-  pub fn write_tree(&self) -> Result<()> {
-    let t = self.as_tree()?;
-    t.traverse(&|tree| self.write_object(tree))
+  pub fn write_tree(&self, tree: &Tree) -> Result<()> {
+    tree.traverse(&|t| self.write_object(t))
   }
 
   pub fn update_head(&self, new_sha: &Sha1) -> Result<()> {

@@ -1,11 +1,12 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::fmt;
 use std::path::PathBuf;
 
 // use crate::object::Blob;
+use crate::index::{Index, IndexEntry};
 use crate::prelude::*;
 
-#[derive(Debug)]
 pub struct Tree {
   entries:      HashMap<PathBuf, TreeItem>,
   label:        String,
@@ -28,6 +29,22 @@ pub struct PathEntry {
   path: PathBuf,
   mode: String,
   sha:  String,
+}
+
+impl fmt::Debug for Tree {
+  #[rustfmt::skip]
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    let e = self
+      .ordered_keys
+      .iter()
+      .map(|k| self.entries.get(k).unwrap())
+      .collect::<Vec<_>>();
+
+    f.debug_struct("Tree")
+      .field("root", &self.label)
+      .field("entries", &e)
+      .finish()
+  }
 }
 
 impl GitObject for Tree {
@@ -214,6 +231,13 @@ impl PathEntry {
   }
 }
 
+impl From<&Index> for Tree {
+  fn from(idx: &Index) -> Self {
+    let entries = idx.entries().map(|e| e.into()).collect::<Vec<PathEntry>>();
+    Self::build(entries)
+  }
+}
+
 impl PartialOrd for PathEntry {
   fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
     // git compares files a little weirdly, so we must coerce to strings
@@ -232,6 +256,16 @@ impl Eq for PathEntry {}
 impl PartialEq for PathEntry {
   fn eq(&self, other: &Self) -> bool {
     self.path == other.path && self.mode == other.mode
+  }
+}
+
+impl From<&IndexEntry> for PathEntry {
+  fn from(entry: &IndexEntry) -> Self {
+    Self {
+      mode: format!("{:0>6o}", entry.mode),
+      path: PathBuf::from(entry.name.clone()),
+      sha:  entry.sha.clone(),
+    }
   }
 }
 

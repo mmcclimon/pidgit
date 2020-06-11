@@ -12,9 +12,9 @@ const MAX_PATH_SIZE: usize = 0xfff;
 pub struct Index {
   version: u32,
   entries: BTreeMap<String, IndexEntry>,
+  changed: bool,
 }
 
-#[allow(unused)]
 pub struct IndexEntry {
   ctime_sec:  u32,
   ctime_nano: u32,
@@ -22,13 +22,13 @@ pub struct IndexEntry {
   mtime_nano: u32,
   dev:        u32,
   ino:        u32,
-  mode:       u32,
+  pub mode:   u32,
   uid:        u32,
   gid:        u32,
   size:       u32,
-  sha:        String,
+  pub sha:    String,
   flags:      u16,
-  name:       String,
+  pub name:   String,
 }
 
 impl fmt::Debug for IndexEntry {
@@ -192,13 +192,22 @@ impl Index {
       // break; // until parsing done
     }
 
-    Ok(Index { version, entries })
+    Ok(Index {
+      version,
+      entries,
+      changed: false,
+    })
   }
 
   pub fn write<P>(&self, path: P) -> Result<()>
   where
     P: AsRef<Path> + fmt::Debug,
   {
+    if !self.changed {
+      // nothing to do!
+      return Ok(());
+    }
+
     // TODO: flock this or something
     let f = OpenOptions::new().write(true).create(true).open(path)?;
     let mut writer = BufWriter::new(f);
@@ -228,6 +237,11 @@ impl Index {
 
   pub fn add(&mut self, entry: IndexEntry) {
     self.entries.insert(entry.name.clone(), entry);
+    self.changed = true;
+  }
+
+  pub fn entries(&self) -> impl Iterator<Item = &IndexEntry> {
+    self.entries.values()
   }
 
   pub fn num_entries(&self) -> u32 {
