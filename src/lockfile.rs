@@ -49,6 +49,10 @@ impl Lockfile {
   pub fn is_locked(&self) -> bool {
     self.locked.get()
   }
+
+  pub fn path(&self) -> &PathBuf {
+    &self.path
+  }
 }
 
 impl<'l> FileLock<'l> {

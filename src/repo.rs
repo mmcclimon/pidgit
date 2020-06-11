@@ -242,11 +242,14 @@ impl Repository {
   }
 
   pub fn index(&self) -> Result<Index> {
-    Index::from_path(self.git_dir().join("index"))
+    let mut idx = Index::new(self.git_dir().join("index"));
+    idx.load()?;
+    Ok(idx)
   }
 
   pub fn write_index(&self, index: &Index) -> Result<()> {
-    index.write(self.git_dir().join("index"))
+    index.write()?;
+    Ok(())
   }
 
   pub fn as_tree(&self) -> Result<Tree> {

@@ -1,19 +1,22 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
-use std::fs::{File, OpenOptions};
+use std::fs::File;
 use std::io::{prelude::*, BufWriter, Cursor};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use crate::prelude::*;
+use crate::Lockfile;
 
+const INDEX_VERSION: u32 = 2;
 const MAX_PATH_SIZE: usize = 0xfff;
 
 #[derive(Debug)]
 pub struct Index {
-  version: u32,
-  changed: bool,
-  entries: BTreeMap<String, IndexEntry>,
-  parents: HashMap<String, HashSet<String>>,
+  version:  u32,
+  changed:  bool,
+  entries:  BTreeMap<String, IndexEntry>,
+  parents:  HashMap<String, HashSet<String>>,
+  lockfile: Lockfile,
 }
 
 pub struct IndexEntry {
@@ -46,20 +49,32 @@ impl fmt::Debug for IndexEntry {
   }
 }
 
-fn index_error(s: &str) -> Result<Index> {
+fn index_error(s: &str) -> Result<()> {
   Err(PidgitError::Index(s.to_string()))
 }
 
 impl Index {
+  pub fn new(path: PathBuf) -> Self {
+    let lockfile = Lockfile::new(path);
+    Self {
+      version: INDEX_VERSION,
+      changed: false,
+      entries: BTreeMap::new(),
+      parents: HashMap::new(),
+      lockfile,
+    }
+  }
+
   // parse this, based on
   // https://github.com/git/git/blob/master/Documentation/technical/index-format.txt
   // Here, I am ignoring extensions entirely!
-  pub fn from_path<P>(path: P) -> Result<Self>
-  where
-    P: AsRef<Path> + fmt::Debug,
-  {
+  pub fn load(&mut self) -> Result<()> {
+    if self.lockfile.is_locked() {
+      return index_error("index file is locked; cannot read");
+    }
+
     let mut raw = vec![];
-    File::open(&path)?.read_to_end(&mut raw)?;
+    File::open(self.lockfile.path())?.read_to_end(&mut raw)?;
 
     let mut reader = Cursor::new(raw);
 
@@ -88,8 +103,6 @@ impl Index {
     let num_entries = u32::from_be_bytes(buf32);
 
     // A number of sorted index entries
-    let mut entries = BTreeMap::new();
-
     // Index entry
     // Index entries are sorted in ascending order on the name field,
     // interpreted as a string of unsigned bytes (i.e. memcmp() order, no
@@ -171,48 +184,39 @@ impl Index {
         reader.seek(std::io::SeekFrom::Current(padding as i64))?;
       }
 
-      entries.insert(
-        name.clone(),
-        IndexEntry {
-          ctime_sec,
-          ctime_nano,
-          mtime_sec,
-          mtime_nano,
-          dev,
-          ino,
-          mode,
-          uid,
-          gid,
-          size,
-          sha: hex::encode(sha),
-          flags,
-          name,
-        },
-      );
-
-      // break; // until parsing done
+      self.add(IndexEntry {
+        ctime_sec,
+        ctime_nano,
+        mtime_sec,
+        mtime_nano,
+        dev,
+        ino,
+        mode,
+        uid,
+        gid,
+        size,
+        sha: hex::encode(sha),
+        flags,
+        name,
+      });
     }
 
-    Ok(Index {
-      version,
-      entries,
-      changed: false,
-      parents: HashMap::new(),
-    })
+    // we haven't _actually_ changed
+    self.changed = false;
+
+    Ok(())
   }
 
-  pub fn write<P>(&self, path: P) -> Result<()>
-  where
-    P: AsRef<Path> + fmt::Debug,
-  {
+  pub fn write(&self) -> Result<()> {
     if !self.changed {
       // nothing to do!
       return Ok(());
     }
 
+    let lock = self.lockfile.lock()?;
+
     // TODO: flock this or something
-    let f = OpenOptions::new().write(true).create(true).open(path)?;
-    let mut writer = BufWriter::new(f);
+    let mut writer = BufWriter::new(lock);
     let mut sha = sha1::Sha1::new();
 
     let mut header: Vec<u8> = Vec::with_capacity(12);
@@ -232,7 +236,10 @@ impl Index {
     // last 20 bytes is the sha of this content
     writer.write(&sha.digest().bytes())?;
 
-    writer.flush()?;
+    writer
+      .into_inner()
+      .expect("couldn't unwrap bufwriter")
+      .commit()?;
 
     Ok(())
   }
@@ -401,12 +408,8 @@ mod tests {
   }
 
   fn new_empty_index() -> Index {
-    Index {
-      version: 2,
-      changed: false,
-      entries: BTreeMap::new(),
-      parents: HashMap::new(),
-    }
+    let f = tempdir().child("dummy").path().to_path_buf();
+    Index::new(f)
   }
 
   fn index_with_entries(names: &[&str]) -> Index {

@@ -12,7 +12,7 @@ pub fn run(_matches: &ArgMatches) -> Result<()> {
 
   println!("{:#?}", index);
 
-  index.write("fake-index")?;
+  index.write()?;
 
   Ok(())
 }
