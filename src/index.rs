@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
 use std::fs::{File, OpenOptions};
 use std::io::{prelude::*, BufWriter, Cursor};
@@ -11,8 +11,9 @@ const MAX_PATH_SIZE: usize = 0xfff;
 #[derive(Debug)]
 pub struct Index {
   version: u32,
-  entries: BTreeMap<String, IndexEntry>,
   changed: bool,
+  entries: BTreeMap<String, IndexEntry>,
+  parents: HashMap<String, HashSet<String>>,
 }
 
 pub struct IndexEntry {
@@ -196,6 +197,7 @@ impl Index {
       version,
       entries,
       changed: false,
+      parents: HashMap::new(),
     })
   }
 
@@ -236,8 +238,59 @@ impl Index {
   }
 
   pub fn add(&mut self, entry: IndexEntry) {
-    self.entries.insert(entry.name.clone(), entry);
     self.changed = true;
+    self.remove_conflicts(&entry);
+
+    for parent in entry.parents() {
+      let k = parent.to_string_lossy().into_owned();
+      let mut set = self.parents.get_mut(&k);
+
+      if set.is_none() {
+        self.parents.insert(k.clone(), HashSet::new());
+        set = self.parents.get_mut(&k);
+      }
+
+      set.unwrap().insert(entry.name.clone());
+    }
+
+    self.entries.insert(entry.name.clone(), entry);
+  }
+
+  fn remove_conflicts(&mut self, entry: &IndexEntry) {
+    for parent in entry.parents() {
+      let k = parent.to_string_lossy().into_owned();
+      self.remove_entry(&k);
+    }
+
+    self.remove_children(entry);
+  }
+
+  fn remove_entry(&mut self, key: &str) {
+    let entry = self.entries.remove(key);
+
+    if let Some(entry) = entry {
+      for parent in entry.parents() {
+        let k = parent.to_string_lossy().into_owned();
+        let children = self.parents.get_mut(&k).unwrap();
+        children.remove(&entry.name);
+
+        if children.is_empty() {
+          self.parents.remove(&k);
+        }
+      }
+    }
+  }
+
+  fn remove_children(&mut self, entry: &IndexEntry) {
+    if !self.parents.contains_key(&entry.name) {
+      return;
+    }
+
+    let children = self.parents.get(&entry.name).unwrap().clone();
+
+    for child in children.iter() {
+      self.remove_entry(child);
+    }
   }
 
   pub fn entries(&self) -> impl Iterator<Item = &IndexEntry> {
@@ -251,10 +304,20 @@ impl Index {
 
 impl IndexEntry {
   pub fn new(path: &PathBuf) -> Result<Self> {
-    use std::os::unix::fs::MetadataExt;
-    let meta = path.metadata()?;
-
     let name = path.to_string_lossy().into_owned();
+    let meta = path.metadata()?;
+    let sha = util::compute_sha_for_path(path)?.hexdigest();
+
+    Ok(Self::new_from_data(name, sha, meta))
+  }
+
+  pub fn new_from_data(
+    name: String,
+    sha: String,
+    meta: std::fs::Metadata,
+  ) -> Self {
+    use std::os::unix::fs::MetadataExt;
+
     let namelen = name.len();
 
     if namelen > MAX_PATH_SIZE {
@@ -266,7 +329,7 @@ impl IndexEntry {
     let mut flags = 0u16;
     flags = flags | (namelen as u16);
 
-    Ok(IndexEntry {
+    IndexEntry {
       ctime_sec: meta.ctime() as u32,
       ctime_nano: meta.ctime_nsec() as u32,
       mtime_sec: meta.mtime() as u32,
@@ -277,10 +340,10 @@ impl IndexEntry {
       uid: meta.uid(),
       gid: meta.gid(),
       size: meta.size() as u32,
-      sha: util::compute_sha_for_path(path)?.hexdigest(),
+      sha,
       flags,
       name,
-    })
+    }
   }
 
   pub fn as_bytes(&self) -> Vec<u8> {
@@ -309,5 +372,139 @@ impl IndexEntry {
     }
 
     ret
+  }
+
+  pub fn parents(&self) -> Vec<PathBuf> {
+    let path = PathBuf::from(&self.name);
+    let mut parents = path
+      .ancestors()
+      .skip(1)
+      .map(|p| p.to_path_buf())
+      .collect::<Vec<_>>();
+
+    parents.pop(); // remove empty path
+    parents.reverse();
+
+    parents
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use assert_fs::prelude::*;
+  use assert_fs::TempDir;
+  use serial_test::serial;
+  use std::collections::BTreeMap;
+
+  const EMPTY_SHA: &str = "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391";
+
+  fn random_stat() -> std::fs::Metadata {
+    std::fs::metadata(file!()).unwrap()
+  }
+
+  fn new_empty_index() -> Index {
+    Index {
+      version: 2,
+      changed: false,
+      entries: BTreeMap::new(),
+      parents: HashMap::new(),
+    }
+  }
+
+  fn index_with_entries(names: &[&str]) -> Index {
+    let mut idx = new_empty_index();
+    for name in names {
+      idx.add(new_empty_entry(name));
+    }
+
+    idx
+  }
+
+  fn new_empty_entry(basename: &str) -> IndexEntry {
+    IndexEntry::new_from_data(
+      basename.to_string(),
+      EMPTY_SHA.to_string(),
+      random_stat(),
+    )
+  }
+
+  #[serial]
+  #[test]
+  fn entry_from_path() {
+    let dir = TempDir::new().expect("couldn't make tempdir");
+    let f = dir.child("foo.txt");
+    f.write_str("").unwrap();
+    let entry =
+      IndexEntry::new(&f.path().to_path_buf()).expect("couldn't create entry");
+
+    assert_eq!(entry.mode, 0o100644);
+    assert_eq!(entry.sha, EMPTY_SHA);
+    assert!(entry.name.ends_with("foo.txt"));
+  }
+
+  #[test]
+  fn add_file() {
+    let mut idx = new_empty_index();
+    let entry = new_empty_entry("alice.txt");
+    idx.add(entry);
+
+    assert_eq!(idx.num_entries(), 1);
+    assert_eq!(idx.changed, true);
+  }
+
+  #[test]
+  fn replace_file_with_dir() {
+    let mut idx = index_with_entries(&["alice.txt", "bob.txt"]);
+
+    assert_eq!(idx.num_entries(), 2);
+    assert_eq!(
+      vec!["alice.txt", "bob.txt"],
+      idx.entries.keys().collect::<Vec<_>>()
+    );
+
+    idx.add(new_empty_entry("alice.txt/nested.txt"));
+
+    assert_eq!(idx.num_entries(), 2);
+    assert_eq!(
+      vec!["alice.txt/nested.txt", "bob.txt"],
+      idx.entries.keys().collect::<Vec<_>>()
+    );
+  }
+
+  #[test]
+  fn replace_dir_with_file() {
+    let mut idx = index_with_entries(&["alice.txt", "nested/bob.txt"]);
+
+    idx.add(new_empty_entry("nested"));
+
+    assert_eq!(idx.num_entries(), 2);
+    assert_eq!(
+      vec!["alice.txt", "nested"],
+      idx.entries.keys().collect::<Vec<_>>()
+    );
+  }
+
+  #[test]
+  fn replace_dir_with_file_recursive() {
+    let mut idx = index_with_entries(&[
+      "alice.txt",
+      "nested/bob.txt",
+      "nested/inner/claire.txt",
+    ]);
+
+    let mut parent_keys = idx.parents.keys().collect::<Vec<_>>();
+    parent_keys.sort();
+
+    assert_eq!(vec!["nested", "nested/inner"], parent_keys);
+
+    idx.add(new_empty_entry("nested"));
+
+    assert_eq!(idx.num_entries(), 2);
+    assert_eq!(
+      vec!["alice.txt", "nested"],
+      idx.entries.keys().collect::<Vec<_>>()
+    );
+    assert!(idx.parents.is_empty());
   }
 }
