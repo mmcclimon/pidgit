@@ -141,6 +141,12 @@ impl Repository {
   pub fn write_object(&self, obj: &dyn GitObject) -> Result<()> {
     let path = self.path_for_sha(&obj.sha().hexdigest());
 
+    // I am ignoring, here, the possibility that this path exists and might
+    // somehow conflict??
+    if path.is_file() {
+      return Ok(());
+    }
+
     // create parent dir!
     std::fs::create_dir_all(path.parent().unwrap())?;
 
@@ -283,17 +289,25 @@ impl Repository {
   }
 
   pub fn list_files_from_base(&self, base: &PathBuf) -> Result<Vec<PathBuf>> {
+    if !base.exists() {
+      return Err(PidgitError::PathspecNotFound(
+        base.as_os_str().to_os_string(),
+      ));
+    }
+
     let mut dir_entries = vec![];
 
     let relativize =
       |p: &PathBuf| p.strip_prefix(&self.work_tree).unwrap().to_path_buf();
 
-    if base.is_file() {
-      dir_entries.push(relativize(base));
+    let abs_base = base.canonicalize()?;
+
+    if abs_base.is_file() {
+      dir_entries.push(relativize(&abs_base));
       return Ok(dir_entries);
     }
 
-    for e in std::fs::read_dir(base)?.filter_map(std::result::Result::ok) {
+    for e in std::fs::read_dir(abs_base)?.filter_map(std::result::Result::ok) {
       let path = e.path();
 
       if self.ignore.contains(path.file_name().unwrap()) {

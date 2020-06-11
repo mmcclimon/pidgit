@@ -1,3 +1,4 @@
+use std::ffi::OsString;
 use std::fmt;
 use std::io::Error as IoError;
 use std::num::ParseIntError;
@@ -11,6 +12,7 @@ pub enum PidgitError {
   Encoding(Box<dyn std::error::Error>),
   Internal(Box<dyn std::error::Error>),
   ObjectNotFound(String),
+  PathspecNotFound(OsString),
   Index(String),
 }
 
@@ -28,6 +30,9 @@ impl fmt::Display for PidgitError {
       PE::Internal(err) => write!(f, "weird error: {}", err),
       PE::ObjectNotFound(sha) => write!(f, "object not found: {}", sha),
       PE::Index(err) => write!(f, "could not parse index file: {}", err),
+      PE::PathspecNotFound(spec) => {
+        write!(f, "pathspec {:?} did not match any files", spec)
+      },
     }
   }
 }
