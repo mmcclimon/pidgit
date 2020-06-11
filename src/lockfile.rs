@@ -61,7 +61,7 @@ impl<'l> FileLock<'l> {
     Ok(())
   }
 
-  pub fn rollback(mut self) -> Result<()> {
+  pub fn rollback(self) -> Result<()> {
     std::fs::remove_file(&self.lockfile.lock_path)?;
     self.lockfile.locked.set(false);
     Ok(())

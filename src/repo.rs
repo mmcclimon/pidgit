@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use crate::index::Index;
 use crate::object::{Object, Tree};
 use crate::prelude::*;
+use crate::Lockfile;
 
 const GIT_DIR_NAME: &'static str = ".pidgit";
 
@@ -265,22 +266,24 @@ impl Repository {
   }
 
   pub fn update_head(&self, new_sha: &Sha1) -> Result<()> {
-    use std::fs::OpenOptions;
-
+    // we must read the content of .git/HEAD. If that's a gitref, we find the
+    // open that other file instead. If it's not a gitref, it must be a sha
+    // (i.e., we're in detached head mode), so we lock the head file itself.
     let raw = self.read_file("HEAD")?;
 
-    let suffix = if raw.starts_with("ref: ") {
+    let ref_path = if raw.starts_with("ref: ") {
       raw.trim_start_matches("ref: ")
     } else {
       // must be a sha
       "HEAD"
     };
 
-    let mut f = OpenOptions::new()
-      .write(true)
-      .open(self.git_dir().join(suffix))?;
+    let lockfile = Lockfile::new(self.git_dir().join(ref_path));
+    let mut lock = lockfile.lock()?;
 
-    f.write_all(format!("{}\n", new_sha.hexdigest()).as_bytes())?;
+    lock.write_all(format!("{}\n", new_sha.hexdigest()).as_bytes())?;
+    lock.commit()?;
+
     Ok(())
   }
 

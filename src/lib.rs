@@ -6,9 +6,7 @@ mod object;
 mod repo;
 pub mod util;
 
-// pub use errors::{PidgitError, Result};
-// pub use object::Object;
-// pub use repo::Repository;
+pub use crate::lockfile::Lockfile;
 
 // A convenience module appropriate for glob imports (`use chrono::prelude::*;`).
 pub mod prelude {
