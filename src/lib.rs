@@ -8,7 +8,7 @@ pub mod util;
 
 pub use crate::lockfile::Lockfile;
 
-// A convenience module appropriate for glob imports (`use chrono::prelude::*;`).
+// A convenience module appropriate for glob imports
 pub mod prelude {
   pub use crate::errors::{PidgitError, Result};
   pub use crate::object::GitObject;
