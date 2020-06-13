@@ -1,9 +1,15 @@
 use clap::{App, Arg, ArgMatches};
 use std::path::PathBuf;
 
+use crate::cmd::{Stdout, Writeable};
 use crate::index::IndexEntry;
 use crate::object::Blob;
 use crate::prelude::*;
+
+#[derive(Debug)]
+struct Add<W: Writeable> {
+  stdout: Stdout<W>,
+}
 
 pub fn app<'a, 'b>() -> App<'a, 'b> {
   App::new("add").about("add file contents to the index").arg(
@@ -14,27 +20,34 @@ pub fn app<'a, 'b>() -> App<'a, 'b> {
   )
 }
 
-pub fn run<W>(matches: &ArgMatches, _stdout: &mut W) -> Result<()>
-where
-  W: std::io::Write,
-{
-  let repo = util::find_repo()?;
-  let mut index = repo.index()?;
+pub fn new<'w, W: 'w + Writeable>(stdout: Stdout<W>) -> Box<dyn Command<W> + 'w> {
+  Box::new(Add { stdout })
+}
 
-  for raw_path in matches.values_of("pathspec").unwrap() {
-    let base = PathBuf::from(raw_path); // .canonicalize()?;
-
-    for path in repo.list_files_from_base(&base)? {
-      let entry = IndexEntry::new(&path)?;
-
-      let blob = Blob::from_path(&path)?;
-      repo.write_object(&blob)?;
-
-      index.add(entry);
-    }
+impl<W: Writeable> Command<W> for Add<W> {
+  fn stdout(&self) -> &Stdout<W> {
+    &self.stdout
   }
 
-  repo.write_index(&index)?;
+  fn run(&mut self, matches: &ArgMatches) -> Result<()> {
+    let repo = util::find_repo()?;
+    let mut index = repo.index()?;
 
-  Ok(())
+    for raw_path in matches.values_of("pathspec").unwrap() {
+      let base = PathBuf::from(raw_path); // .canonicalize()?;
+
+      for path in repo.list_files_from_base(&base)? {
+        let entry = IndexEntry::new(&path)?;
+
+        let blob = Blob::from_path(&path)?;
+        repo.write_object(&blob)?;
+
+        index.add(entry);
+      }
+    }
+
+    repo.write_index(&index)?;
+
+    Ok(())
+  }
 }

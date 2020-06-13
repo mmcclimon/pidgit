@@ -1,7 +1,12 @@
 use clap::{App, ArgMatches};
-use std::io::Write;
 
+use crate::cmd::{Stdout, Writeable};
 use crate::prelude::*;
+
+#[derive(Debug)]
+struct Init<W: Writeable> {
+  stdout: Stdout<W>,
+}
 
 const HEAD: &'static str = "ref: refs/heads/master\n";
 
@@ -19,6 +24,10 @@ pub fn app<'a, 'b>() -> App<'a, 'b> {
   App::new("init").about("initialize a pidgit directory")
 }
 
+pub fn new<'w, W: 'w + Writeable>(stdout: Stdout<W>) -> Box<dyn Command<W> + 'w> {
+  Box::new(Init { stdout })
+}
+
 // We need to make, inside the current directory:
 // .pidgit/
 //    HEAD
@@ -31,46 +40,47 @@ pub fn app<'a, 'b>() -> App<'a, 'b> {
 //      remotes/
 //
 
-pub fn run<W>(_matches: &ArgMatches, stdout: &mut W) -> Result<()>
-where
-  W: std::io::Write,
-{
-  if let Ok(repo) = util::find_repo() {
-    // maybe later: die if we can't initialize a repo from it
-    writeln!(
-      stdout,
-      "{} already exists, nothing to do!",
-      repo.work_tree().display()
-    )?;
-    return Ok(());
+impl<W: Writeable> Command<W> for Init<W> {
+  fn stdout(&self) -> &Stdout<W> {
+    &self.stdout
   }
 
-  let pwd = std::env::current_dir()?;
-  let repo = Repository::create_empty(&pwd)?;
+  fn run(&mut self, _matches: &ArgMatches) -> Result<()> {
+    if let Ok(repo) = util::find_repo() {
+      // maybe later: die if we can't initialize a repo from it
+      self.println(format!(
+        "{} already exists, nothing to do!",
+        repo.work_tree().display()
+      ));
+      return Ok(());
+    }
 
-  // HEAD
-  let mut head = repo.create_file("HEAD")?;
-  head.write_all(HEAD.as_bytes())?;
+    let pwd = std::env::current_dir()?;
+    let repo = Repository::create_empty(&pwd)?;
 
-  // config
-  let mut config = repo.create_file("config")?;
-  config.write_all(CONFIG.as_bytes())?;
+    // HEAD
+    let mut head = repo.create_file("HEAD")?;
+    head.write_all(HEAD.as_bytes())?;
 
-  // object dir
-  repo.create_dir("objects")?;
+    // config
+    let mut config = repo.create_file("config")?;
+    config.write_all(CONFIG.as_bytes())?;
 
-  // refs
-  repo.create_dir("refs/heads")?;
-  repo.create_dir("refs/tags")?;
-  repo.create_dir("refs/remotes")?;
+    // object dir
+    repo.create_dir("objects")?;
 
-  writeln!(
-    stdout,
-    "initialized empty pidgit repository at {}",
-    repo.git_dir().display()
-  )?;
+    // refs
+    repo.create_dir("refs/heads")?;
+    repo.create_dir("refs/tags")?;
+    repo.create_dir("refs/remotes")?;
 
-  Ok(())
+    self.println(format!(
+      "initialized empty pidgit repository at {}",
+      repo.git_dir().display()
+    ));
+
+    Ok(())
+  }
 }
 
 #[cfg(test)]

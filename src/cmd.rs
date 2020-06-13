@@ -1,5 +1,6 @@
 use crate::prelude::*;
 use clap::ArgMatches;
+use std::cell::RefCell;
 
 mod add;
 mod cat_file;
@@ -12,6 +13,13 @@ mod ls_files;
 mod rev_parse;
 
 pub type App = clap::App<'static, 'static>;
+
+pub trait Writeable = std::io::Write + std::fmt::Debug;
+
+#[derive(Debug)]
+pub struct Stdout<W: Writeable> {
+  writer: RefCell<W>,
+}
 
 pub fn command_apps() -> impl IntoIterator<Item = App> {
   vec![
@@ -27,20 +35,51 @@ pub fn command_apps() -> impl IntoIterator<Item = App> {
   ]
 }
 
-pub fn dispatch<W>(app_matches: &ArgMatches, mut stdout: &mut W) -> Result<()>
-where
-  W: std::io::Write,
-{
-  match app_matches.subcommand() {
-    ("add", Some(matches)) => add::run(matches, &mut stdout),
-    ("cat-file", Some(matches)) => cat_file::run(matches, &mut stdout),
-    ("commit", Some(matches)) => commit::run(matches, &mut stdout),
-    ("dump-index", Some(matches)) => dump_index::run(matches, &mut stdout),
-    ("hash-object", Some(matches)) => hash_object::run(matches, &mut stdout),
-    ("init", Some(matches)) => init::run(matches, &mut stdout),
-    ("log", Some(matches)) => log::run(matches, &mut stdout),
-    ("ls-files", Some(matches)) => ls_files::run(matches, &mut stdout),
-    ("rev-parse", Some(matches)) => rev_parse::run(matches, &mut stdout),
+pub fn dispatch<'w, W: Writeable>(
+  app_matches: &ArgMatches,
+  writer: &'w mut W,
+) -> Result<()> {
+  let stdout = Stdout {
+    writer: RefCell::new(writer),
+  };
+
+  let cmd_name = app_matches.subcommand_name().expect("no subcommand!");
+
+  let mut cmd = match cmd_name {
+    "add" => add::new(stdout),
+    "cat-file" => cat_file::new(stdout),
+    "commit" => commit::new(stdout),
+    "dump-index" => dump_index::new(stdout),
+    "hash-object" => hash_object::new(stdout),
+    "init" => init::new(stdout),
+    "log" => log::new(stdout),
+    "ls-files" => ls_files::new(stdout),
+    "rev-parse" => rev_parse::new(stdout),
     _ => unreachable!("unknown command!"),
+  };
+
+  cmd.run(app_matches.subcommand_matches(cmd_name).unwrap())
+}
+
+pub trait Command<W: Writeable>: std::fmt::Debug {
+  fn stdout(&self) -> &Stdout<W>;
+
+  fn run(&mut self, matches: &ArgMatches) -> Result<()>;
+
+  fn println(&self, out: String) {
+    self.stdout().println(out);
+  }
+}
+
+impl<W: Writeable> Stdout<W> {
+  pub fn println(&self, out: String) {
+    writeln!(self.writer.borrow_mut(), "{}", out).unwrap();
+  }
+
+  pub fn println_raw(&self, out: &[u8]) -> Result<()> {
+    let mut writer = self.writer.borrow_mut();
+    writer.write_all(out)?;
+    writer.write(b"\n")?;
+    Ok(())
   }
 }

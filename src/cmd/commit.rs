@@ -1,8 +1,14 @@
 use chrono::Local;
 use clap::{App, Arg, ArgMatches};
 
+use crate::cmd::{Stdout, Writeable};
 use crate::object::{Commit, Person, Tree};
 use crate::prelude::*;
+
+#[derive(Debug)]
+struct CommitCmd<W: Writeable> {
+  stdout: Stdout<W>,
+}
 
 pub fn app<'a, 'b>() -> App<'a, 'b> {
   App::new("commit")
@@ -18,56 +24,62 @@ pub fn app<'a, 'b>() -> App<'a, 'b> {
     )
 }
 
-pub fn run<W>(matches: &ArgMatches, stdout: &mut W) -> Result<()>
-where
-  W: std::io::Write,
-{
-  let repo = util::find_repo()?;
+pub fn new<'w, W: 'w + Writeable>(stdout: Stdout<W>) -> Box<dyn Command<W> + 'w> {
+  Box::new(CommitCmd { stdout })
+}
 
-  // first pass, will improve later
-  let who = Person {
-    name:  std::env::var("GIT_AUTHOR_NAME").unwrap(),
-    email: std::env::var("GIT_AUTHOR_EMAIL").unwrap(),
-  };
-
-  let head = repo.resolve_object("HEAD")?.into_inner();
-
-  let now = Local::now();
-  let fixed = now.with_timezone(now.offset());
-
-  let mut msg = matches.value_of("message").unwrap().to_string();
-
-  if !msg.ends_with("\n") {
-    msg.push_str("\n");
+impl<W: Writeable> Command<W> for CommitCmd<W> {
+  fn stdout(&self) -> &Stdout<W> {
+    &self.stdout
   }
 
-  // let tree = repo.as_tree()?;
-  let index = repo.index()?;
-  let tree = Tree::from(&index);
+  fn run(&mut self, matches: &ArgMatches) -> Result<()> {
+    let repo = util::find_repo()?;
 
-  let commit = Commit {
-    tree:           tree.sha().hexdigest(),
-    parent_shas:    vec![head.sha().hexdigest()],
-    author:         who.clone(),
-    author_date:    fixed,
-    committer:      who,
-    committer_date: fixed,
-    message:        msg,
-    content:        None,
-  };
+    // first pass, will improve later
+    let who = Person {
+      name:  std::env::var("GIT_AUTHOR_NAME").unwrap(),
+      email: std::env::var("GIT_AUTHOR_EMAIL").unwrap(),
+    };
 
-  // we write the tree, then write the commit.
-  // ...obviously, this should be improved a lot, as it's destructive.
-  repo.write_tree(&tree)?;
-  repo.write_object(&commit)?;
-  repo.update_head(&commit.sha())?;
+    let head = repo.resolve_object("HEAD")?.into_inner();
 
-  writeln!(
-    stdout,
-    "[{}] {}",
-    &commit.sha().hexdigest()[0..8],
-    commit.title()
-  )?;
+    let now = Local::now();
+    let fixed = now.with_timezone(now.offset());
 
-  Ok(())
+    let mut msg = matches.value_of("message").unwrap().to_string();
+
+    if !msg.ends_with("\n") {
+      msg.push_str("\n");
+    }
+
+    // let tree = repo.as_tree()?;
+    let index = repo.index()?;
+    let tree = Tree::from(&index);
+
+    let commit = Commit {
+      tree:           tree.sha().hexdigest(),
+      parent_shas:    vec![head.sha().hexdigest()],
+      author:         who.clone(),
+      author_date:    fixed,
+      committer:      who,
+      committer_date: fixed,
+      message:        msg,
+      content:        None,
+    };
+
+    // we write the tree, then write the commit.
+    // ...obviously, this should be improved a lot, as it's destructive.
+    repo.write_tree(&tree)?;
+    repo.write_object(&commit)?;
+    repo.update_head(&commit.sha())?;
+
+    self.println(format!(
+      "[{}] {}",
+      &commit.sha().hexdigest()[0..8],
+      commit.title()
+    ));
+
+    Ok(())
+  }
 }

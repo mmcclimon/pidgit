@@ -1,6 +1,12 @@
 use clap::{App, Arg, ArgMatches};
 
+use crate::cmd::{Stdout, Writeable};
 use crate::prelude::*;
+
+#[derive(Debug)]
+struct CatFile<W: Writeable> {
+  stdout: Stdout<W>,
+}
 
 pub fn app<'a, 'b>() -> App<'a, 'b> {
   App::new("cat-file")
@@ -37,25 +43,31 @@ pub fn app<'a, 'b>() -> App<'a, 'b> {
     )
 }
 
-pub fn run<W>(m: &ArgMatches, stdout: &mut W) -> Result<()>
-where
-  W: std::io::Write,
-{
-  let repo = util::find_repo()?;
+pub fn new<'w, W: 'w + Writeable>(stdout: Stdout<W>) -> Box<dyn Command<W> + 'w> {
+  Box::new(CatFile { stdout })
+}
 
-  let object = repo.resolve_object(m.value_of("object").unwrap())?;
-  let inner = object.into_inner();
+impl<W: Writeable> Command<W> for CatFile<W> {
+  fn stdout(&self) -> &Stdout<W> {
+    &self.stdout
+  }
 
-  match inner {
-    _ if m.is_present("type") => writeln!(stdout, "{}", inner.type_str())?,
-    _ if m.is_present("size") => writeln!(stdout, "{}", inner.size())?,
-    _ if m.is_present("debug") => writeln!(stdout, "{:#?}", inner)?,
-    _ if m.is_present("pretty") => {
-      stdout.write_all(&inner.pretty())?;
-      stdout.write(b"\n")?;
-    },
-    _ => writeln!(stdout, "{} {}", inner.type_str(), inner.size())?,
-  };
+  fn run(&mut self, m: &ArgMatches) -> Result<()> {
+    let repo = util::find_repo()?;
 
-  Ok(())
+    let object = repo.resolve_object(m.value_of("object").unwrap())?;
+    let inner = object.into_inner();
+
+    match inner {
+      _ if m.is_present("type") => self.println(format!("{}", inner.type_str())),
+      _ if m.is_present("size") => self.println(format!("{}", inner.size())),
+      _ if m.is_present("debug") => self.println(format!("{:#?}", inner)),
+      _ if m.is_present("pretty") => {
+        self.stdout.println_raw(&inner.pretty())?;
+      },
+      _ => self.println(format!("{} {}", inner.type_str(), inner.size())),
+    };
+
+    Ok(())
+  }
 }

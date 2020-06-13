@@ -1,7 +1,13 @@
 use clap::{App, Arg, ArgMatches};
 
+use crate::cmd::{Stdout, Writeable};
 use crate::object::Object;
 use crate::prelude::*;
+
+#[derive(Debug)]
+struct Log<W: Writeable> {
+  stdout: Stdout<W>,
+}
 
 pub fn app<'a, 'b>() -> App<'a, 'b> {
   App::new("log").about("show commit logs").arg(
@@ -11,35 +17,42 @@ pub fn app<'a, 'b>() -> App<'a, 'b> {
   )
 }
 
-pub fn run<W>(matches: &ArgMatches, stdout: &mut W) -> Result<()>
-where
-  W: std::io::Write,
-{
-  let repo = util::find_repo()?;
+pub fn new<'w, W: 'w + Writeable>(stdout: Stdout<W>) -> Box<dyn Command<W> + 'w> {
+  Box::new(Log { stdout })
+}
 
-  let to_find = matches.value_of("ref").unwrap();
-  let object = repo.resolve_object(to_find)?;
-
-  let mut c = match object {
-    Object::Commit(commit) => commit,
-    _ => {
-      return Err(PidgitError::Generic(format!(
-        "ref {} is not a commit!",
-        to_find,
-      )))
-    },
-  };
-
-  // this is terrible, but expedient
-  loop {
-    writeln!(stdout, "{} {}", &c.sha().hexdigest()[0..8], c.title())?;
-    let mut parents = c.parents(&repo);
-    if let Some(parent) = parents.pop() {
-      c = parent;
-    } else {
-      break;
-    }
+impl<W: Writeable> Command<W> for Log<W> {
+  fn stdout(&self) -> &Stdout<W> {
+    &self.stdout
   }
 
-  Ok(())
+  fn run(&mut self, matches: &ArgMatches) -> Result<()> {
+    let repo = util::find_repo()?;
+
+    let to_find = matches.value_of("ref").unwrap();
+    let object = repo.resolve_object(to_find)?;
+
+    let mut c = match object {
+      Object::Commit(commit) => commit,
+      _ => {
+        return Err(PidgitError::Generic(format!(
+          "ref {} is not a commit!",
+          to_find,
+        )))
+      },
+    };
+
+    // this is terrible, but expedient
+    loop {
+      self.println(format!("{} {}", &c.sha().hexdigest()[0..8], c.title()));
+      let mut parents = c.parents(&repo);
+      if let Some(parent) = parents.pop() {
+        c = parent;
+      } else {
+        break;
+      }
+    }
+
+    Ok(())
+  }
 }

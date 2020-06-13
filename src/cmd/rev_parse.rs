@@ -1,6 +1,12 @@
 use clap::{App, Arg, ArgMatches};
 
+use crate::cmd::{Stdout, Writeable};
 use crate::prelude::*;
+
+#[derive(Debug)]
+struct RevParse<W: Writeable> {
+  stdout: Stdout<W>,
+}
 
 pub fn app<'a, 'b>() -> App<'a, 'b> {
   App::new("rev-parse")
@@ -12,15 +18,22 @@ pub fn app<'a, 'b>() -> App<'a, 'b> {
     )
 }
 
-pub fn run<W>(m: &ArgMatches, stdout: &mut W) -> Result<()>
-where
-  W: std::io::Write,
-{
-  let repo = util::find_repo()?;
+pub fn new<'w, W: 'w + Writeable>(stdout: Stdout<W>) -> Box<dyn Command<W> + 'w> {
+  Box::new(RevParse { stdout })
+}
 
-  let object = repo.resolve_object(m.value_of("object").unwrap())?;
+impl<W: Writeable> Command<W> for RevParse<W> {
+  fn stdout(&self) -> &Stdout<W> {
+    &self.stdout
+  }
 
-  writeln!(stdout, "{}", object.get_ref().sha().hexdigest())?;
+  fn run(&mut self, matches: &ArgMatches) -> Result<()> {
+    let repo = util::find_repo()?;
 
-  Ok(())
+    let object = repo.resolve_object(matches.value_of("object").unwrap())?;
+
+    self.println(format!("{}", object.get_ref().sha().hexdigest()));
+
+    Ok(())
+  }
 }

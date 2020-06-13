@@ -1,3 +1,5 @@
+#![feature(trait_alias)]
+
 pub mod cmd;
 mod errors;
 mod index;
@@ -22,6 +24,7 @@ pub fn app() -> App<'static, 'static> {
 
 // A convenience module appropriate for glob imports
 pub mod prelude {
+  pub use crate::cmd::Command;
   pub use crate::errors::{PidgitError, Result};
   pub use crate::object::GitObject;
   pub use crate::repo::Repository;
