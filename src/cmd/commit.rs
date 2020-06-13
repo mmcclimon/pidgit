@@ -18,7 +18,10 @@ pub fn app<'a, 'b>() -> App<'a, 'b> {
     )
 }
 
-pub fn run(matches: &ArgMatches) -> Result<()> {
+pub fn run<W>(matches: &ArgMatches, stdout: &mut W) -> Result<()>
+where
+  W: std::io::Write,
+{
   let repo = util::find_repo()?;
 
   // first pass, will improve later
@@ -59,7 +62,12 @@ pub fn run(matches: &ArgMatches) -> Result<()> {
   repo.write_object(&commit)?;
   repo.update_head(&commit.sha())?;
 
-  println!("[{}] {}", &commit.sha().hexdigest()[0..8], commit.title());
+  writeln!(
+    stdout,
+    "[{}] {}",
+    &commit.sha().hexdigest()[0..8],
+    commit.title()
+  )?;
 
   Ok(())
 }

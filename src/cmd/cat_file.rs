@@ -1,5 +1,4 @@
 use clap::{App, Arg, ArgMatches};
-use std::io::{self, Write};
 
 use crate::prelude::*;
 
@@ -38,22 +37,24 @@ pub fn app<'a, 'b>() -> App<'a, 'b> {
     )
 }
 
-pub fn run(m: &ArgMatches) -> Result<()> {
+pub fn run<W>(m: &ArgMatches, stdout: &mut W) -> Result<()>
+where
+  W: std::io::Write,
+{
   let repo = util::find_repo()?;
 
   let object = repo.resolve_object(m.value_of("object").unwrap())?;
   let inner = object.into_inner();
 
   match inner {
-    _ if m.is_present("type") => println!("{}", inner.type_str()),
-    _ if m.is_present("size") => println!("{}", inner.size()),
-    _ if m.is_present("debug") => println!("{:#?}", inner),
+    _ if m.is_present("type") => writeln!(stdout, "{}", inner.type_str())?,
+    _ if m.is_present("size") => writeln!(stdout, "{}", inner.size())?,
+    _ if m.is_present("debug") => writeln!(stdout, "{:#?}", inner)?,
     _ if m.is_present("pretty") => {
-      let mut stdout = io::stdout();
       stdout.write_all(&inner.pretty())?;
       stdout.write(b"\n")?;
     },
-    _ => println!("{} {}", inner.type_str(), inner.size()),
+    _ => writeln!(stdout, "{} {}", inner.type_str(), inner.size())?,
   };
 
   Ok(())

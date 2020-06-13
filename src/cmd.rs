@@ -27,17 +27,20 @@ pub fn command_apps() -> impl IntoIterator<Item = App> {
   ]
 }
 
-pub fn dispatch(app_matches: &ArgMatches) -> Result<()> {
+pub fn dispatch<W>(app_matches: &ArgMatches, mut stdout: &mut W) -> Result<()>
+where
+  W: std::io::Write,
+{
   match app_matches.subcommand() {
-    ("add", Some(matches)) => add::run(matches),
-    ("cat-file", Some(matches)) => cat_file::run(matches),
-    ("commit", Some(matches)) => commit::run(matches),
-    ("dump-index", Some(matches)) => dump_index::run(matches),
-    ("hash-object", Some(matches)) => hash_object::run(matches),
-    ("init", Some(matches)) => init::run(matches),
-    ("log", Some(matches)) => log::run(matches),
-    ("ls-files", Some(matches)) => ls_files::run(matches),
-    ("rev-parse", Some(matches)) => rev_parse::run(matches),
+    ("add", Some(matches)) => add::run(matches, &mut stdout),
+    ("cat-file", Some(matches)) => cat_file::run(matches, &mut stdout),
+    ("commit", Some(matches)) => commit::run(matches, &mut stdout),
+    ("dump-index", Some(matches)) => dump_index::run(matches, &mut stdout),
+    ("hash-object", Some(matches)) => hash_object::run(matches, &mut stdout),
+    ("init", Some(matches)) => init::run(matches, &mut stdout),
+    ("log", Some(matches)) => log::run(matches, &mut stdout),
+    ("ls-files", Some(matches)) => ls_files::run(matches, &mut stdout),
+    ("rev-parse", Some(matches)) => rev_parse::run(matches, &mut stdout),
     _ => unreachable!("unknown command!"),
   }
 }

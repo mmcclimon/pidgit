@@ -23,7 +23,10 @@ pub fn app<'a, 'b>() -> App<'a, 'b> {
     .arg(Arg::with_name("path").required(true).help("path to hash"))
 }
 
-pub fn run(matches: &ArgMatches) -> Result<()> {
+pub fn run<W>(matches: &ArgMatches, stdout: &mut W) -> Result<()>
+where
+  W: std::io::Write,
+{
   let repo = util::find_repo();
 
   if repo.is_err() && matches.is_present("write") {
@@ -52,7 +55,7 @@ pub fn run(matches: &ArgMatches) -> Result<()> {
     repo.unwrap().write_object(&blob)?;
   }
 
-  println!("{}", blob.sha().hexdigest());
+  writeln!(stdout, "{}", blob.sha().hexdigest())?;
 
   Ok(())
 }

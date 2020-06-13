@@ -11,7 +11,10 @@ pub fn app<'a, 'b>() -> App<'a, 'b> {
   )
 }
 
-pub fn run(matches: &ArgMatches) -> Result<()> {
+pub fn run<W>(matches: &ArgMatches, stdout: &mut W) -> Result<()>
+where
+  W: std::io::Write,
+{
   let repo = util::find_repo()?;
 
   let to_find = matches.value_of("ref").unwrap();
@@ -29,7 +32,7 @@ pub fn run(matches: &ArgMatches) -> Result<()> {
 
   // this is terrible, but expedient
   loop {
-    println!("{} {}", &c.sha().hexdigest()[0..8], c.title());
+    writeln!(stdout, "{} {}", &c.sha().hexdigest()[0..8], c.title())?;
     let mut parents = c.parents(&repo);
     if let Some(parent) = parents.pop() {
       c = parent;

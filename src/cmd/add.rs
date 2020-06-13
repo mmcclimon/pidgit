@@ -14,7 +14,10 @@ pub fn app<'a, 'b>() -> App<'a, 'b> {
   )
 }
 
-pub fn run(matches: &ArgMatches) -> Result<()> {
+pub fn run<W>(matches: &ArgMatches, _stdout: &mut W) -> Result<()>
+where
+  W: std::io::Write,
+{
   let repo = util::find_repo()?;
   let mut index = repo.index()?;
 

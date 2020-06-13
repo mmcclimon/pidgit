@@ -31,13 +31,17 @@ pub fn app<'a, 'b>() -> App<'a, 'b> {
 //      remotes/
 //
 
-pub fn run(_matches: &ArgMatches) -> Result<()> {
+pub fn run<W>(_matches: &ArgMatches, stdout: &mut W) -> Result<()>
+where
+  W: std::io::Write,
+{
   if let Ok(repo) = util::find_repo() {
     // maybe later: die if we can't initialize a repo from it
-    println!(
+    writeln!(
+      stdout,
       "{} already exists, nothing to do!",
       repo.work_tree().display()
-    );
+    )?;
     return Ok(());
   }
 

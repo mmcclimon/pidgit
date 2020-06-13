@@ -12,12 +12,15 @@ pub fn app<'a, 'b>() -> App<'a, 'b> {
     )
 }
 
-pub fn run(m: &ArgMatches) -> Result<()> {
+pub fn run<W>(m: &ArgMatches, stdout: &mut W) -> Result<()>
+where
+  W: std::io::Write,
+{
   let repo = util::find_repo()?;
 
   let object = repo.resolve_object(m.value_of("object").unwrap())?;
 
-  println!("{}", object.get_ref().sha().hexdigest());
+  writeln!(stdout, "{}", object.get_ref().sha().hexdigest())?;
 
   Ok(())
 }

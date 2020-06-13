@@ -7,11 +7,14 @@ pub fn app<'a, 'b>() -> App<'a, 'b> {
   App::new("ls-files").about("list all the files in the tree")
 }
 
-pub fn run(_matches: &ArgMatches) -> Result<()> {
+pub fn run<W>(_matches: &ArgMatches, stdout: &mut W) -> Result<()>
+where
+  W: std::io::Write,
+{
   let repo = util::find_repo()?;
 
   for entry in repo.list_files()? {
-    println!("{}", entry.display());
+    writeln!(stdout, "{}", entry.display())?;
   }
 
   Ok(())
