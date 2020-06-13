@@ -8,6 +8,18 @@ pub mod util;
 
 pub use crate::lockfile::Lockfile;
 
+use clap::{crate_version, App, AppSettings};
+
+pub fn app() -> App<'static, 'static> {
+  App::new("pidgit")
+    .version(crate_version!())
+    .settings(&[
+      AppSettings::SubcommandRequiredElseHelp,
+      AppSettings::VersionlessSubcommands,
+    ])
+    .subcommands(cmd::command_apps())
+}
+
 // A convenience module appropriate for glob imports
 pub mod prelude {
   pub use crate::errors::{PidgitError, Result};
