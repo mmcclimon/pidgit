@@ -9,6 +9,7 @@ use std::string::FromUtf8Error;
 #[derive(Debug)]
 pub enum PidgitError {
   Generic(String),
+  Clap(clap::Error),
   Io(IoError),
   Encoding(Box<dyn std::error::Error>),
   Internal(Box<dyn std::error::Error>),
@@ -26,8 +27,9 @@ impl std::error::Error for PidgitError {}
 impl fmt::Display for PidgitError {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     match self {
-      PE::Io(err) => write!(f, "{:?}", err),
       PE::Generic(err) => write!(f, "{}", err),
+      PE::Clap(err) => write!(f, "{:?}", err),
+      PE::Io(err) => write!(f, "{:?}", err),
       PE::Encoding(err) => write!(f, "{}", err),
       PE::Internal(err) => write!(f, "weird error: {}", err),
       PE::ObjectNotFound(sha) => write!(f, "object not found: {}", sha),
@@ -37,6 +39,12 @@ impl fmt::Display for PidgitError {
       },
       PE::Lock(path, err) => write!(f, "could not lock {:?}: {}", path, err),
     }
+  }
+}
+
+impl From<clap::Error> for PidgitError {
+  fn from(err: clap::Error) -> Self {
+    PE::Clap(err)
   }
 }
 
