@@ -404,7 +404,10 @@ mod tests {
   const EMPTY_SHA: &str = "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391";
 
   fn random_stat() -> std::fs::Metadata {
-    std::fs::metadata(file!()).unwrap()
+    let d = tempdir();
+    let f = d.child("dummy");
+    f.touch().unwrap();
+    f.path().metadata().unwrap()
   }
 
   fn new_empty_index() -> Index {
@@ -429,7 +432,6 @@ mod tests {
     )
   }
 
-  #[serial]
   #[test]
   fn entry_from_path() {
     let dir = tempdir();
