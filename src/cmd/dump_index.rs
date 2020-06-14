@@ -1,31 +1,25 @@
 use clap::{App, ArgMatches};
 
-use crate::cmd::{Stdout, Writeable};
+use crate::cmd::Stdout;
 use crate::prelude::*;
 
 #[derive(Debug)]
-struct DumpIndex<W: Writeable> {
-  stdout: Stdout<W>,
+struct DumpIndex;
+
+pub fn new() -> Box<dyn Command> {
+  Box::new(DumpIndex {})
 }
 
-pub fn app<'a, 'b>() -> App<'a, 'b> {
-  App::new("dump-index").about("dump the index file (just for debugging)")
-}
-
-pub fn new<'w, W: 'w + Writeable>(stdout: Stdout<W>) -> Box<dyn Command<W> + 'w> {
-  Box::new(DumpIndex { stdout })
-}
-
-impl<W: Writeable> Command<W> for DumpIndex<W> {
-  fn stdout(&self) -> &Stdout<W> {
-    &self.stdout
+impl Command for DumpIndex {
+  fn app(&self) -> App<'static, 'static> {
+    App::new("dump-index").about("dump the index file (just for debugging)")
   }
 
-  fn run(&mut self, _matches: &ArgMatches) -> Result<()> {
+  fn run(&self, _matches: &ArgMatches, stdout: &Stdout) -> Result<()> {
     let repo = util::find_repo()?;
     let index = repo.index()?;
 
-    self.println(format!("{:#?}", index));
+    stdout.println(format!("{:#?}", index));
 
     index.write()?;
 

@@ -1,12 +1,11 @@
 use clap::{App, ArgMatches};
+use std::io::Write;
 
-use crate::cmd::{Stdout, Writeable};
+use crate::cmd::Stdout;
 use crate::prelude::*;
 
 #[derive(Debug)]
-struct Init<W: Writeable> {
-  stdout: Stdout<W>,
-}
+struct Init;
 
 const HEAD: &'static str = "ref: refs/heads/master\n";
 
@@ -20,14 +19,6 @@ const CONFIG: &'static str = "\
 	precomposeunicode = true
 ";
 
-pub fn app<'a, 'b>() -> App<'a, 'b> {
-  App::new("init").about("initialize a pidgit directory")
-}
-
-pub fn new<'w, W: 'w + Writeable>(stdout: Stdout<W>) -> Box<dyn Command<W> + 'w> {
-  Box::new(Init { stdout })
-}
-
 // We need to make, inside the current directory:
 // .pidgit/
 //    HEAD
@@ -38,17 +29,20 @@ pub fn new<'w, W: 'w + Writeable>(stdout: Stdout<W>) -> Box<dyn Command<W> + 'w>
 //      heads/
 //      tags/
 //      remotes/
-//
 
-impl<W: Writeable> Command<W> for Init<W> {
-  fn stdout(&self) -> &Stdout<W> {
-    &self.stdout
+pub fn new() -> Box<dyn Command> {
+  Box::new(Init {})
+}
+
+impl Command for Init {
+  fn app(&self) -> App<'static, 'static> {
+    App::new("init").about("initialize a pidgit directory")
   }
 
-  fn run(&mut self, _matches: &ArgMatches) -> Result<()> {
+  fn run(&self, _matches: &ArgMatches, stdout: &Stdout) -> Result<()> {
     if let Ok(repo) = util::find_repo() {
       // maybe later: die if we can't initialize a repo from it
-      self.println(format!(
+      stdout.println(format!(
         "{} already exists, nothing to do!",
         repo.work_tree().display()
       ));
@@ -74,7 +68,7 @@ impl<W: Writeable> Command<W> for Init<W> {
     repo.create_dir("refs/tags")?;
     repo.create_dir("refs/remotes")?;
 
-    self.println(format!(
+    stdout.println(format!(
       "initialized empty pidgit repository at {}",
       repo.git_dir().display()
     ));

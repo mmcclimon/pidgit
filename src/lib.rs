@@ -10,18 +10,6 @@ pub mod util;
 
 pub use crate::lockfile::Lockfile;
 
-use clap::{crate_version, App, AppSettings};
-
-pub fn app() -> App<'static, 'static> {
-  App::new("pidgit")
-    .version(crate_version!())
-    .settings(&[
-      AppSettings::SubcommandRequiredElseHelp,
-      AppSettings::VersionlessSubcommands,
-    ])
-    .subcommands(cmd::command_apps())
-}
-
 // A convenience module appropriate for glob imports
 pub mod prelude {
   pub use crate::cmd::Command;
@@ -33,9 +21,10 @@ pub mod prelude {
 
 #[cfg(test)]
 pub mod test_prelude {
-  pub use super::errors::{PidgitError, Result};
+  use super::*;
   pub use assert_fs::prelude::*;
   pub use assert_fs::TempDir;
+  pub use errors::{PidgitError, Result};
   pub use predicates::prelude::*;
   pub use serial_test::serial;
 
@@ -53,10 +42,13 @@ pub mod test_prelude {
     // they don't want the munging.
     std::env::remove_var("PIDGIT_DIR");
 
+    let cmd = super::cmd::CommandSet::new();
     let mut stdout = Cursor::new(vec![]);
+
     let full_args = std::iter::once("pidgit").chain(args);
-    let matches = super::app().get_matches_from_safe(full_args)?;
-    super::cmd::dispatch(&matches, &mut stdout)?;
+    let matches = cmd.app().get_matches_from_safe(full_args)?;
+
+    cmd.dispatch(&matches, &mut stdout)?;
     Ok(String::from_utf8(stdout.into_inner())?)
   }
 }

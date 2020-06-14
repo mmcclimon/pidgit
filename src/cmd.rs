@@ -1,6 +1,6 @@
 use crate::prelude::*;
-use clap::ArgMatches;
-use std::cell::RefCell;
+use clap::{crate_version, AppSettings, ArgMatches};
+use std::{cell::RefCell, collections::BTreeMap};
 
 mod add;
 mod cat_file;
@@ -16,62 +16,71 @@ pub type App = clap::App<'static, 'static>;
 
 pub trait Writeable = std::io::Write + std::fmt::Debug;
 
-#[derive(Debug)]
-pub struct Stdout<W: Writeable> {
-  writer: RefCell<W>,
+pub struct CommandSet {
+  commands: BTreeMap<&'static str, Box<dyn Command>>,
 }
 
-pub fn command_apps() -> impl IntoIterator<Item = App> {
-  vec![
-    add::app(),
-    cat_file::app(),
-    commit::app(),
-    dump_index::app(),
-    hash_object::app(),
-    init::app(),
-    log::app(),
-    ls_files::app(),
-    rev_parse::app(),
-  ]
+pub struct Stdout<'w> {
+  writer: RefCell<Box<dyn std::io::Write + 'w>>,
 }
 
-pub fn dispatch<'w, W: Writeable>(
-  app_matches: &ArgMatches,
-  writer: &'w mut W,
-) -> Result<()> {
-  let stdout = Stdout {
-    writer: RefCell::new(writer),
-  };
+impl CommandSet {
+  pub fn new() -> Self {
+    let mut commands = BTreeMap::new();
 
-  let cmd_name = app_matches.subcommand_name().expect("no subcommand!");
+    commands.insert("add", add::new());
+    commands.insert("cat-file", cat_file::new());
+    commands.insert("commit", commit::new());
+    commands.insert("dump-index", dump_index::new());
+    commands.insert("hash-object", hash_object::new());
+    commands.insert("init", init::new());
+    commands.insert("log", log::new());
+    commands.insert("ls-files", ls_files::new());
+    commands.insert("rev-parse", rev_parse::new());
 
-  let mut cmd = match cmd_name {
-    "add" => add::new(stdout),
-    "cat-file" => cat_file::new(stdout),
-    "commit" => commit::new(stdout),
-    "dump-index" => dump_index::new(stdout),
-    "hash-object" => hash_object::new(stdout),
-    "init" => init::new(stdout),
-    "log" => log::new(stdout),
-    "ls-files" => ls_files::new(stdout),
-    "rev-parse" => rev_parse::new(stdout),
-    _ => unreachable!("unknown command!"),
-  };
+    Self { commands }
+  }
 
-  cmd.run(app_matches.subcommand_matches(cmd_name).unwrap())
-}
+  pub fn app(&self) -> App {
+    App::new("pidgit")
+      .version(crate_version!())
+      .settings(&[
+        AppSettings::SubcommandRequiredElseHelp,
+        AppSettings::VersionlessSubcommands,
+      ])
+      .subcommands(self.apps())
+  }
 
-pub trait Command<W: Writeable>: std::fmt::Debug {
-  fn stdout(&self) -> &Stdout<W>;
+  pub fn apps(&self) -> impl IntoIterator<Item = App> + '_ {
+    self.commands.values().map(|cmd| cmd.app())
+  }
 
-  fn run(&mut self, matches: &ArgMatches) -> Result<()>;
+  pub fn dispatch<W: Writeable>(
+    &self,
+    app_matches: &ArgMatches,
+    writer: W,
+  ) -> Result<()> {
+    let stdout = Stdout {
+      writer: RefCell::new(Box::new(writer)),
+    };
 
-  fn println(&self, out: String) {
-    self.stdout().println(out);
+    let cmd_name = app_matches.subcommand_name().expect("no subcommand!");
+
+    let cmd = self.commands.get(cmd_name).expect("unknown command!");
+
+    let matches = app_matches.subcommand_matches(cmd_name).unwrap();
+
+    cmd.run(matches, &stdout)
   }
 }
 
-impl<W: Writeable> Stdout<W> {
+pub trait Command: std::fmt::Debug {
+  fn app(&self) -> App;
+
+  fn run(&self, matches: &ArgMatches, stdout: &Stdout) -> Result<()>;
+}
+
+impl<'w> Stdout<'w> {
   pub fn println(&self, out: String) {
     writeln!(self.writer.borrow_mut(), "{}", out).unwrap();
   }

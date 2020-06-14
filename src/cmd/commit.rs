@@ -1,39 +1,33 @@
 use chrono::Local;
 use clap::{App, Arg, ArgMatches};
 
-use crate::cmd::{Stdout, Writeable};
+use crate::cmd::Stdout;
 use crate::object::{Commit, Person, Tree};
 use crate::prelude::*;
 
 #[derive(Debug)]
-struct CommitCmd<W: Writeable> {
-  stdout: Stdout<W>,
+struct CommitCmd;
+
+pub fn new() -> Box<dyn Command> {
+  Box::new(CommitCmd {})
 }
 
-pub fn app<'a, 'b>() -> App<'a, 'b> {
-  App::new("commit")
-    .about("record changes to the repository")
-    .arg(
-      Arg::with_name("message")
-        .short("m")
-        .long("message")
-        .takes_value(true)
-        .value_name("msg")
-        .required(true)
-        .help("use this as the message"),
-    )
-}
-
-pub fn new<'w, W: 'w + Writeable>(stdout: Stdout<W>) -> Box<dyn Command<W> + 'w> {
-  Box::new(CommitCmd { stdout })
-}
-
-impl<W: Writeable> Command<W> for CommitCmd<W> {
-  fn stdout(&self) -> &Stdout<W> {
-    &self.stdout
+impl Command for CommitCmd {
+  fn app(&self) -> App<'static, 'static> {
+    App::new("commit")
+      .about("record changes to the repository")
+      .arg(
+        Arg::with_name("message")
+          .short("m")
+          .long("message")
+          .takes_value(true)
+          .value_name("msg")
+          .required(true)
+          .help("use this as the message"),
+      )
   }
 
-  fn run(&mut self, matches: &ArgMatches) -> Result<()> {
+  fn run(&self, matches: &ArgMatches, stdout: &Stdout) -> Result<()> {
     let repo = util::find_repo()?;
 
     // first pass, will improve later
@@ -74,7 +68,7 @@ impl<W: Writeable> Command<W> for CommitCmd<W> {
     repo.write_object(&commit)?;
     repo.update_head(&commit.sha())?;
 
-    self.println(format!(
+    stdout.println(format!(
       "[{}] {}",
       &commit.sha().hexdigest()[0..8],
       commit.title()
