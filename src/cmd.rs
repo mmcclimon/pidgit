@@ -16,7 +16,7 @@ pub type App = clap::App<'static, 'static>;
 
 pub struct Context<'w> {
   writer: RefCell<Box<dyn std::io::Write + 'w>>,
-  repo:   Option<Repository>,
+  repo:   Option<&'w Repository>,
 }
 
 pub struct CommandSet {
@@ -56,7 +56,7 @@ pub trait Command: std::fmt::Debug {
 }
 
 impl<'w> Context<'w> {
-  pub fn new<W>(repo: Option<Repository>, writer: W) -> Self
+  pub fn new<W>(repo: Option<&'w Repository>, writer: W) -> Self
   where
     W: std::io::Write + 'w,
   {
@@ -69,7 +69,6 @@ impl<'w> Context<'w> {
   pub fn repo(&self) -> Result<&Repository> {
     self
       .repo
-      .as_ref()
       .ok_or_else(|| PidgitError::Generic("not a pidgit repository".to_string()))
   }
 

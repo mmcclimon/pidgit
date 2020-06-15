@@ -42,18 +42,9 @@ mod tests {
   use crate::test_prelude::*;
   type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
-  // eventually, all this stuff will be listed into some common module
-
-  // make a tempdir and cd to it
-  fn cd_temp() -> Result<TempDir> {
-    let dir = TempDir::new()?;
-    std::env::set_current_dir(&dir.path())?;
-    Ok(dir)
-  }
-
   #[test]
   fn init_help() {
-    let res = run_pidgit(vec!["init", "--help"]);
+    let res = run_pidgit(vec!["init", "--help"], None);
 
     if let Err(PidgitError::Clap(err)) = res {
       let help = err.message;
@@ -65,27 +56,24 @@ mod tests {
   }
 
   #[test]
-  #[serial]
   fn init_dot_pidgit_exists() -> Result<()> {
-    let dir = cd_temp()?;
-    let pidgit_path = dir.child(".pidgit");
-    pidgit_path.create_dir_all()?;
-    pidgit_path.assert(predicate::path::is_dir());
-
-    let stdout = run_pidgit(vec!["init"])?;
+    let tr = new_empty_repo();
+    let stdout = tr.run_pidgit(vec!["init"])?;
     assert!(stdout.contains("nothing to do"));
 
     Ok(())
   }
 
   #[test]
-  #[serial]
+  #[serial] // must be run in isolation because it relies on $PWD
   fn init_create_dir() -> Result<()> {
     use predicate::path::is_dir;
     use predicate::str::contains;
 
-    let dir = cd_temp()?;
-    let stdout = run_pidgit(vec!["init"])?;
+    let dir = tempdir();
+    std::env::set_current_dir(&dir.path())?;
+
+    let stdout = run_pidgit(vec!["init"], None)?;
     assert!(stdout.contains("initialized empty pidgit repository"));
 
     let ppath = dir.child(".pidgit");

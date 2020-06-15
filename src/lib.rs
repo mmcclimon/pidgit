@@ -61,7 +61,7 @@ impl PidgitApp {
   pub fn dispatch<W>(
     &self,
     app_matches: &ArgMatches,
-    repo: Option<Repository>,
+    repo: Option<&Repository>,
     writer: W,
   ) -> Result<()>
   where
