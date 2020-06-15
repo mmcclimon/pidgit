@@ -1,34 +1,10 @@
 use clap::{App, ArgMatches};
-use std::io::Write;
 
 use crate::cmd::Context;
 use crate::prelude::*;
 
 #[derive(Debug)]
 struct Init;
-
-const HEAD: &'static str = "ref: refs/heads/master\n";
-
-const CONFIG: &'static str = "\
-[core]
-	repositoryformatversion = 0
-	filemode = true
-	bare = false
-	logallrefupdates = true
-	ignorecase = true
-	precomposeunicode = true
-";
-
-// We need to make, inside the current directory:
-// .pidgit/
-//    HEAD
-//    config
-//    index   <-- no, for now.
-//    objects/
-//    refs/
-//      heads/
-//      tags/
-//      remotes/
 
 pub fn new() -> Box<dyn Command> {
   Box::new(Init {})
@@ -51,22 +27,6 @@ impl Command for Init {
 
     let pwd = std::env::current_dir()?;
     let repo = Repository::create_empty(&pwd)?;
-
-    // HEAD
-    let mut head = repo.create_file("HEAD")?;
-    head.write_all(HEAD.as_bytes())?;
-
-    // config
-    let mut config = repo.create_file("config")?;
-    config.write_all(CONFIG.as_bytes())?;
-
-    // object dir
-    repo.create_dir("objects")?;
-
-    // refs
-    repo.create_dir("refs/heads")?;
-    repo.create_dir("refs/tags")?;
-    repo.create_dir("refs/remotes")?;
 
     ctx.println(format!(
       "initialized empty pidgit repository at {}",

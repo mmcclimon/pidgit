@@ -11,7 +11,17 @@ use crate::object::{Object, Tree};
 use crate::prelude::*;
 use crate::Lockfile;
 
-const GIT_DIR_NAME: &'static str = ".pidgit";
+const GIT_DIR_NAME: &str = ".pidgit";
+const HEAD: &str = "ref: refs/heads/master\n";
+const CONFIG: &str = "\
+[core]
+	repositoryformatversion = 0
+	filemode = true
+	bare = false
+	logallrefupdates = true
+	ignorecase = true
+	precomposeunicode = true
+";
 
 #[derive(Debug)]
 pub struct Repository {
@@ -73,16 +83,44 @@ impl Repository {
     })
   }
 
+  // We need to make, inside the current directory:
+  // .pidgit/
+  //    HEAD
+  //    config
+  //    index
+  //    objects/
+  //    refs/{heads,tags,remotes}/
   pub fn create_empty(root: &Path) -> Result<Self> {
     let git_dir = root.join(GIT_DIR_NAME);
     DirBuilder::new().create(&git_dir)?;
 
-    Ok(Repository {
+    let repo = Repository {
       work_tree: root.to_path_buf(),
       git_dir,
       ignore: default_ignore(),
       ftignore: default_ftignore(),
-    })
+    };
+
+    // HEAD
+    let mut head = repo.create_file("HEAD")?;
+    head.write_all(HEAD.as_bytes())?;
+
+    // config
+    let mut config = repo.create_file("config")?;
+    config.write_all(CONFIG.as_bytes())?;
+
+    // object dir
+    repo.create_dir("objects")?;
+
+    // refs
+    repo.create_dir("refs/heads")?;
+    repo.create_dir("refs/tags")?;
+    repo.create_dir("refs/remotes")?;
+
+    let idx = Index::new(repo.git_dir().join("index"));
+    repo.write_index(&idx)?;
+
+    Ok(repo)
   }
 
   pub fn work_tree(&self) -> &PathBuf {
