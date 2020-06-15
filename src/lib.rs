@@ -26,8 +26,9 @@ pub mod prelude {
 //   let app = pidgit::new();
 //   app.dispatch(&app.get_matches(), std::io::stdout())?;
 
-use crate::cmd::{CommandSet, Stdout};
+use crate::cmd::{CommandSet, Context};
 use crate::errors::Result;
+use crate::repo::Repository;
 use clap::{crate_version, App, AppSettings, ArgMatches};
 
 pub struct PidgitApp {
@@ -57,7 +58,12 @@ impl PidgitApp {
     self.clap_app().get_matches()
   }
 
-  pub fn dispatch<W>(&self, app_matches: &ArgMatches, writer: W) -> Result<()>
+  pub fn dispatch<W>(
+    &self,
+    app_matches: &ArgMatches,
+    repo: Option<Repository>,
+    writer: W,
+  ) -> Result<()>
   where
     W: std::io::Write,
   {
@@ -65,7 +71,10 @@ impl PidgitApp {
     let cmd = self.commands.command_named(cmd_name); // might panic
     let matches = app_matches.subcommand_matches(cmd_name).unwrap();
 
-    let stdout = Stdout::new(writer);
-    cmd.run(matches, &stdout)
+    let ctx = Context::new(repo, writer);
+
+    cmd.run(matches, &ctx)?;
+
+    Ok(())
   }
 }

@@ -3,23 +3,27 @@ use std::path::{Path, PathBuf};
 
 use crate::prelude::*;
 
-pub fn find_repo() -> Result<Repository> {
+pub fn find_repo() -> Option<Repository> {
   // so that PIDGIT_DIR=.git works for quick desk-checking
   if let Ok(dir) = std::env::var("PIDGIT_DIR") {
-    let path = PathBuf::from(dir).canonicalize()?;
-    return Repository::from_git_dir(&path);
+    let path = PathBuf::from(dir)
+      .canonicalize()
+      .expect("couldn't canonicalize PIDGIT_DIR");
+    return Repository::from_git_dir(&path).ok();
   }
 
-  let pwd = std::env::current_dir()?;
+  let pwd = std::env::current_dir();
+
+  if pwd.is_err() {
+    return None;
+  }
 
   let repo = pwd
+    .unwrap()
     .ancestors()
     .filter(|p| p.join(".pidgit").is_dir())
     .next()
-    .map_or_else(
-      || Err(PidgitError::Generic("not a pidgit repository".to_string())),
-      |p| Repository::from_work_tree(p),
-    );
+    .map(|p| Repository::from_work_tree(p).unwrap());
 
   repo
 }

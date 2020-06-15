@@ -1,7 +1,7 @@
 use clap::{App, Arg, ArgMatches};
 use std::path::PathBuf;
 
-use crate::cmd::Stdout;
+use crate::cmd::Context;
 use crate::object::Blob;
 use crate::prelude::*;
 
@@ -32,8 +32,8 @@ impl Command for HashObject {
       .arg(Arg::with_name("path").required(true).help("path to hash"))
   }
 
-  fn run(&self, matches: &ArgMatches, stdout: &Stdout) -> Result<()> {
-    let repo = util::find_repo();
+  fn run(&self, matches: &ArgMatches, ctx: &Context) -> Result<()> {
+    let repo = ctx.repo();
 
     if repo.is_err() && matches.is_present("write") {
       return repo.map(|_| ());
@@ -61,7 +61,7 @@ impl Command for HashObject {
       repo.unwrap().write_object(&blob)?;
     }
 
-    stdout.println(format!("{}", blob.sha().hexdigest()));
+    ctx.println(format!("{}", blob.sha().hexdigest()));
 
     Ok(())
   }

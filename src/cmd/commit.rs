@@ -1,7 +1,7 @@
 use chrono::Local;
 use clap::{App, Arg, ArgMatches};
 
-use crate::cmd::Stdout;
+use crate::cmd::Context;
 use crate::object::{Commit, Person, Tree};
 use crate::prelude::*;
 
@@ -27,8 +27,8 @@ impl Command for CommitCmd {
       )
   }
 
-  fn run(&self, matches: &ArgMatches, stdout: &Stdout) -> Result<()> {
-    let repo = util::find_repo()?;
+  fn run(&self, matches: &ArgMatches, ctx: &Context) -> Result<()> {
+    let repo = ctx.repo()?;
 
     // first pass, will improve later
     let who = Person {
@@ -68,7 +68,7 @@ impl Command for CommitCmd {
     repo.write_object(&commit)?;
     repo.update_head(&commit.sha())?;
 
-    stdout.println(format!(
+    ctx.println(format!(
       "[{}] {}",
       &commit.sha().hexdigest()[0..8],
       commit.title()

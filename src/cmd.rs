@@ -14,8 +14,9 @@ mod rev_parse;
 
 pub type App = clap::App<'static, 'static>;
 
-pub struct Stdout<'w> {
+pub struct Context<'w> {
   writer: RefCell<Box<dyn std::io::Write + 'w>>,
+  repo:   Option<Repository>,
 }
 
 pub struct CommandSet {
@@ -51,14 +52,25 @@ impl CommandSet {
 pub trait Command: std::fmt::Debug {
   fn app(&self) -> App;
 
-  fn run(&self, matches: &ArgMatches, stdout: &Stdout) -> Result<()>;
+  fn run(&self, matches: &ArgMatches, ctx: &Context) -> Result<()>;
 }
 
-impl<'w> Stdout<'w> {
-  pub fn new<W: std::io::Write + 'w>(writer: W) -> Self {
+impl<'w> Context<'w> {
+  pub fn new<W>(repo: Option<Repository>, writer: W) -> Self
+  where
+    W: std::io::Write + 'w,
+  {
     Self {
+      repo,
       writer: RefCell::new(Box::new(writer)),
     }
+  }
+
+  pub fn repo(&self) -> Result<&Repository> {
+    self
+      .repo
+      .as_ref()
+      .ok_or_else(|| PidgitError::Generic("not a pidgit repository".to_string()))
   }
 
   pub fn println(&self, out: String) {

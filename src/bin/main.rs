@@ -1,6 +1,7 @@
 fn main() {
   let app = pidgit::new();
-  let res = app.dispatch(&app.get_matches(), std::io::stdout());
+  let repo = pidgit::util::find_repo();
+  let res = app.dispatch(&app.get_matches(), repo, std::io::stdout());
 
   if let Err(err) = res {
     eprintln!("fatal: {}", err);

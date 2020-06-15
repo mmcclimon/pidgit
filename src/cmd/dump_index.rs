@@ -1,6 +1,6 @@
 use clap::{App, ArgMatches};
 
-use crate::cmd::Stdout;
+use crate::cmd::Context;
 use crate::prelude::*;
 
 #[derive(Debug)]
@@ -15,11 +15,11 @@ impl Command for DumpIndex {
     App::new("dump-index").about("dump the index file (just for debugging)")
   }
 
-  fn run(&self, _matches: &ArgMatches, stdout: &Stdout) -> Result<()> {
-    let repo = util::find_repo()?;
+  fn run(&self, _matches: &ArgMatches, ctx: &Context) -> Result<()> {
+    let repo = ctx.repo()?;
     let index = repo.index()?;
 
-    stdout.println(format!("{:#?}", index));
+    ctx.println(format!("{:#?}", index));
 
     index.write()?;
 

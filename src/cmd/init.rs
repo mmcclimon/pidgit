@@ -1,7 +1,7 @@
 use clap::{App, ArgMatches};
 use std::io::Write;
 
-use crate::cmd::Stdout;
+use crate::cmd::Context;
 use crate::prelude::*;
 
 #[derive(Debug)]
@@ -39,10 +39,10 @@ impl Command for Init {
     App::new("init").about("initialize a pidgit directory")
   }
 
-  fn run(&self, _matches: &ArgMatches, stdout: &Stdout) -> Result<()> {
-    if let Ok(repo) = util::find_repo() {
+  fn run(&self, _matches: &ArgMatches, ctx: &Context) -> Result<()> {
+    if let Ok(repo) = ctx.repo() {
       // maybe later: die if we can't initialize a repo from it
-      stdout.println(format!(
+      ctx.println(format!(
         "{} already exists, nothing to do!",
         repo.work_tree().display()
       ));
@@ -68,7 +68,7 @@ impl Command for Init {
     repo.create_dir("refs/tags")?;
     repo.create_dir("refs/remotes")?;
 
-    stdout.println(format!(
+    ctx.println(format!(
       "initialized empty pidgit repository at {}",
       repo.git_dir().display()
     ));

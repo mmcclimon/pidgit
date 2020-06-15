@@ -1,7 +1,7 @@
 use clap::{App, Arg, ArgMatches};
 use std::path::PathBuf;
 
-use crate::cmd::Stdout;
+use crate::cmd::Context;
 use crate::index::IndexEntry;
 use crate::object::Blob;
 use crate::prelude::*;
@@ -23,8 +23,8 @@ impl Command for Add {
     )
   }
 
-  fn run(&self, matches: &ArgMatches, _stdout: &Stdout) -> Result<()> {
-    let repo = util::find_repo()?;
+  fn run(&self, matches: &ArgMatches, ctx: &Context) -> Result<()> {
+    let repo = ctx.repo()?;
     let mut index = repo.index()?;
 
     for raw_path in matches.values_of("pathspec").unwrap() {

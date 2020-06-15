@@ -1,6 +1,6 @@
 use clap::{App, Arg, ArgMatches};
 
-use crate::cmd::Stdout;
+use crate::cmd::Context;
 use crate::prelude::*;
 
 #[derive(Debug)]
@@ -46,22 +46,20 @@ impl Command for CatFile {
       )
   }
 
-  fn run(&self, m: &ArgMatches, stdout: &Stdout) -> Result<()> {
-    let repo = util::find_repo()?;
+  fn run(&self, m: &ArgMatches, ctx: &Context) -> Result<()> {
+    let repo = ctx.repo()?;
 
     let object = repo.resolve_object(m.value_of("object").unwrap())?;
     let inner = object.into_inner();
 
     match inner {
-      _ if m.is_present("type") => {
-        stdout.println(format!("{}", inner.type_str()))
-      },
-      _ if m.is_present("size") => stdout.println(format!("{}", inner.size())),
-      _ if m.is_present("debug") => stdout.println(format!("{:#?}", inner)),
+      _ if m.is_present("type") => ctx.println(format!("{}", inner.type_str())),
+      _ if m.is_present("size") => ctx.println(format!("{}", inner.size())),
+      _ if m.is_present("debug") => ctx.println(format!("{:#?}", inner)),
       _ if m.is_present("pretty") => {
-        stdout.println_raw(&inner.pretty())?;
+        ctx.println_raw(&inner.pretty())?;
       },
-      _ => stdout.println(format!("{} {}", inner.type_str(), inner.size())),
+      _ => ctx.println(format!("{} {}", inner.type_str(), inner.size())),
     };
 
     Ok(())

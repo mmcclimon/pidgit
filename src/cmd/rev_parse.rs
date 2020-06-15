@@ -1,6 +1,6 @@
 use clap::{App, Arg, ArgMatches};
 
-use crate::cmd::Stdout;
+use crate::cmd::Context;
 use crate::prelude::*;
 
 #[derive(Debug)]
@@ -21,12 +21,12 @@ impl Command for RevParse {
       )
   }
 
-  fn run(&self, matches: &ArgMatches, stdout: &Stdout) -> Result<()> {
-    let repo = util::find_repo()?;
+  fn run(&self, matches: &ArgMatches, ctx: &Context) -> Result<()> {
+    let repo = ctx.repo()?;
 
     let object = repo.resolve_object(matches.value_of("object").unwrap())?;
 
-    stdout.println(format!("{}", object.get_ref().sha().hexdigest()));
+    ctx.println(format!("{}", object.get_ref().sha().hexdigest()));
 
     Ok(())
   }

@@ -1,6 +1,6 @@
 use clap::{App, Arg, ArgMatches};
 
-use crate::cmd::Stdout;
+use crate::cmd::Context;
 use crate::object::Object;
 use crate::prelude::*;
 
@@ -20,8 +20,8 @@ impl Command for Log {
     )
   }
 
-  fn run(&self, matches: &ArgMatches, stdout: &Stdout) -> Result<()> {
-    let repo = util::find_repo()?;
+  fn run(&self, matches: &ArgMatches, ctx: &Context) -> Result<()> {
+    let repo = ctx.repo()?;
 
     let to_find = matches.value_of("ref").unwrap();
     let object = repo.resolve_object(to_find)?;
@@ -38,7 +38,7 @@ impl Command for Log {
 
     // this is terrible, but expedient
     loop {
-      stdout.println(format!("{} {}", &c.sha().hexdigest()[0..8], c.title()));
+      ctx.println(format!("{} {}", &c.sha().hexdigest()[0..8], c.title()));
       let mut parents = c.parents(&repo);
       if let Some(parent) = parents.pop() {
         c = parent;

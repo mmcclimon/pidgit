@@ -1,6 +1,6 @@
 use clap::{App, ArgMatches};
 
-use crate::cmd::Stdout;
+use crate::cmd::Context;
 use crate::prelude::*;
 
 #[derive(Debug)]
@@ -16,11 +16,9 @@ impl Command for LsFiles {
     App::new("ls-files").about("list all the files in the tree")
   }
 
-  fn run(&self, _matches: &ArgMatches, stdout: &Stdout) -> Result<()> {
-    let repo = util::find_repo()?;
-
-    for entry in repo.list_files()? {
-      stdout.println(format!("{}", entry.display()));
+  fn run(&self, _matches: &ArgMatches, ctx: &Context) -> Result<()> {
+    for entry in ctx.repo()?.list_files()? {
+      ctx.println(format!("{}", entry.display()));
     }
 
     Ok(())
