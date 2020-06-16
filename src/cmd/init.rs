@@ -88,7 +88,7 @@ mod tests {
 
     let ppath = dir.child(".pidgit");
 
-    ppath.child("HEAD").assert(contains("refs/heads/master"));
+    ppath.child("HEAD").assert(contains("refs/heads/main"));
     ppath
       .child("config")
       .assert(contains("repositoryformatversion = 0"));

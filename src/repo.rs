@@ -12,7 +12,7 @@ use crate::prelude::*;
 use crate::Lockfile;
 
 const GIT_DIR_NAME: &str = ".pidgit";
-const HEAD: &str = "ref: refs/heads/master\n";
+const HEAD: &str = "ref: refs/heads/main\n";
 const CONFIG: &str = "\
 [core]
 	repositoryformatversion = 0
