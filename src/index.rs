@@ -312,6 +312,10 @@ impl Index {
   pub fn num_entries(&self) -> u32 {
     self.entries.len() as u32
   }
+
+  pub fn is_tracked(&self, key: &str) -> bool {
+    self.entries.contains_key(key)
+  }
 }
 
 impl IndexEntry {

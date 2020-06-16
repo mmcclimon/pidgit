@@ -11,6 +11,7 @@ mod init;
 mod log;
 mod ls_files;
 mod rev_parse;
+mod status;
 
 pub type App = clap::App<'static, 'static>;
 
@@ -37,6 +38,7 @@ impl CommandSet {
     commands.insert("log", log::new());
     commands.insert("ls-files", ls_files::new());
     commands.insert("rev-parse", rev_parse::new());
+    commands.insert("status", status::new());
 
     Self { commands }
   }
