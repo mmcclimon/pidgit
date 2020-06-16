@@ -41,7 +41,31 @@ impl TestRepo {
 
     let repo = Some(&self.repo);
 
-    app.dispatch(&matches, repo, &mut stdout)?;
+    app.dispatch(&matches, repo, &mut stdout, self.dir.path().to_path_buf())?;
     Ok(String::from_utf8(stdout.into_inner())?)
+  }
+
+  pub fn write_file(&self, filename: &str, content: &str) {
+    self
+      .dir
+      .child(filename)
+      .write_str(content)
+      .expect(&format!("could not write file at {}", filename));
+  }
+
+  pub fn commit(&self, message: &str) -> Result<()> {
+    use crate::object::Person;
+    use chrono::Local;
+
+    let now = Local::now();
+    let fixed = now.with_timezone(now.offset());
+
+    let who = Person {
+      name:  "Pidgit".to_string(),
+      email: "pidgit@example.com".to_string(),
+      date:  fixed,
+    };
+
+    self.repo.commit(message, who.clone(), who).map(|_| ())
   }
 }

@@ -8,14 +8,12 @@ use crate::prelude::*;
 
 #[derive(Debug)]
 pub struct Commit {
-  pub tree:           String,      // sha
-  pub parent_shas:    Vec<String>, // shas
-  pub author:         Person,
-  pub author_date:    DateTime<FixedOffset>,
-  pub committer:      Person,
-  pub committer_date: DateTime<FixedOffset>,
-  pub message:        String,
-  pub content:        Option<Vec<u8>>,
+  pub tree:        String,      // sha
+  pub parent_shas: Vec<String>, // shas
+  pub author:      Person,
+  pub committer:   Person,
+  pub message:     String,
+  pub content:     Option<Vec<u8>>,
 }
 
 // I have no idea what to call this
@@ -23,6 +21,7 @@ pub struct Commit {
 pub struct Person {
   pub name:  String,
   pub email: String,
+  pub date:  DateTime<FixedOffset>,
 }
 
 impl GitObject for Commit {
@@ -42,13 +41,13 @@ impl GitObject for Commit {
     lines.push(format!(
       "author {} {}",
       self.author,
-      self.author_date.format("%s %z")
+      self.author.date.format("%s %z")
     ));
 
     lines.push(format!(
       "committer {} {}",
       self.committer,
-      self.committer_date.format("%s %z")
+      self.committer.date.format("%s %z")
     ));
 
     lines.push("".to_string());
@@ -84,9 +83,7 @@ impl Commit {
 
     let mut tree = None;
     let mut author = None;
-    let mut author_date = None;
     let mut committer = None;
-    let mut committer_date = None;
     let mut parents = vec![];
 
     while (reader.position() as usize) < len {
@@ -104,14 +101,10 @@ impl Commit {
       match words[0] {
         "tree" => tree = Some(words[1].to_string()),
         "author" => {
-          let parsed = parse_author_line(&words[1..].join(" "));
-          author = Some(parsed.0);
-          author_date = Some(parsed.1);
+          author = Some(parse_author_line(&words[1..].join(" ")));
         },
         "committer" => {
-          let parsed = parse_author_line(&words[1..].join(" "));
-          committer = Some(parsed.0);
-          committer_date = Some(parsed.1);
+          committer = Some(parse_author_line(&words[1..].join(" ")));
         },
         "parent" => parents.push(words[1].to_string()),
         _ => break,
@@ -126,16 +119,14 @@ impl Commit {
       tree: tree.expect("did not find tree"),
       parent_shas: parents,
       author: author.expect("did not find author"),
-      author_date: author_date.expect("did not find author"),
       committer: committer.expect("did not find committer"),
-      committer_date: committer_date.expect("did not find committer date"),
       message,
       content: Some(content),
     }
   }
 }
 
-fn parse_author_line(line: &str) -> (Person, DateTime<FixedOffset>) {
+fn parse_author_line(line: &str) -> Person {
   // probably there's a better way to do this...
   let mut reader = BufReader::new(line.as_bytes());
 
@@ -152,12 +143,11 @@ fn parse_author_line(line: &str) -> (Person, DateTime<FixedOffset>) {
 
   let dt = DateTime::parse_from_str(date.trim(), "%s %z").unwrap();
 
-  let person = Person {
+  Person {
     name:  String::from_utf8(name).unwrap().trim().to_string(),
     email: String::from_utf8(email).unwrap().trim().to_string(),
-  };
-
-  (person, dt)
+    date:  dt,
+  }
 }
 
 impl Commit {

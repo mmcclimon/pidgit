@@ -2,7 +2,7 @@ use chrono::Local;
 use clap::{App, Arg, ArgMatches};
 
 use crate::cmd::Context;
-use crate::object::{Commit, Person, Tree};
+use crate::object::Person;
 use crate::prelude::*;
 
 #[derive(Debug)]
@@ -30,43 +30,19 @@ impl Command for CommitCmd {
   fn run(&self, matches: &ArgMatches, ctx: &Context) -> Result<()> {
     let repo = ctx.repo()?;
 
+    let now = Local::now();
+    let fixed = now.with_timezone(now.offset());
+
     // first pass, will improve later
     let who = Person {
       name:  std::env::var("GIT_AUTHOR_NAME").unwrap(),
       email: std::env::var("GIT_AUTHOR_EMAIL").unwrap(),
+      date:  fixed,
     };
 
-    let head = repo.resolve_object("HEAD")?.into_inner();
+    let msg = matches.value_of("message").unwrap().to_string();
 
-    let now = Local::now();
-    let fixed = now.with_timezone(now.offset());
-
-    let mut msg = matches.value_of("message").unwrap().to_string();
-
-    if !msg.ends_with("\n") {
-      msg.push_str("\n");
-    }
-
-    // let tree = repo.as_tree()?;
-    let index = repo.index()?;
-    let tree = Tree::from(&index);
-
-    let commit = Commit {
-      tree:           tree.sha().hexdigest(),
-      parent_shas:    vec![head.sha().hexdigest()],
-      author:         who.clone(),
-      author_date:    fixed,
-      committer:      who,
-      committer_date: fixed,
-      message:        msg,
-      content:        None,
-    };
-
-    // we write the tree, then write the commit.
-    // ...obviously, this should be improved a lot, as it's destructive.
-    repo.write_tree(&tree)?;
-    repo.write_object(&commit)?;
-    repo.update_head(&commit.sha())?;
+    let commit = repo.commit(&msg, who.clone(), who)?;
 
     ctx.println(format!(
       "[{}] {}",

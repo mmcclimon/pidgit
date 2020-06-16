@@ -213,6 +213,11 @@ impl Index {
       return Ok(());
     }
 
+    self.force_write()
+  }
+
+  // write the index, without checking if it's changed first.
+  pub fn force_write(&self) -> Result<()> {
     let lock = self.lockfile.lock()?;
 
     // TODO: flock this or something

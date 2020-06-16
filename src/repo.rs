@@ -7,7 +7,7 @@ use std::io::prelude::*;
 use std::path::{Path, PathBuf};
 
 use crate::index::Index;
-use crate::object::{Object, Tree};
+use crate::object::{Commit, Object, Person, Tree};
 use crate::prelude::*;
 use crate::Lockfile;
 
@@ -58,7 +58,7 @@ impl Repository {
     }
 
     Ok(Repository {
-      work_tree: dir.to_path_buf(),
+      work_tree: dir.canonicalize()?.to_path_buf(),
       git_dir:   dir.join(GIT_DIR_NAME),
       ignore:    default_ignore(),
       ftignore:  default_ftignore(),
@@ -91,11 +91,11 @@ impl Repository {
   //    objects/
   //    refs/{heads,tags,remotes}/
   pub fn create_empty(root: &Path) -> Result<Self> {
-    let git_dir = root.join(GIT_DIR_NAME);
+    let git_dir = root.canonicalize()?.join(GIT_DIR_NAME);
     DirBuilder::new().create(&git_dir)?;
 
     let repo = Repository {
-      work_tree: root.to_path_buf(),
+      work_tree: root.canonicalize()?.to_path_buf(),
       git_dir,
       ignore: default_ignore(),
       ftignore: default_ftignore(),
@@ -118,7 +118,7 @@ impl Repository {
     repo.create_dir("refs/remotes")?;
 
     let idx = Index::new(repo.git_dir().join("index"));
-    repo.write_index(&idx)?;
+    idx.force_write()?;
 
     Ok(repo)
   }
@@ -228,7 +228,18 @@ impl Repository {
   }
 
   fn resolve_ref(&self, refstr: &str) -> Result<Object> {
-    let raw = self.read_file(refstr)?;
+    let res = self.read_file(refstr);
+
+    // if we got an error and we're looking for a symref, return a better error.
+    if let Err(PidgitError::Io(err)) = res {
+      if refstr.starts_with("refs") {
+        return Err(PidgitError::RefNotFound(refstr.to_string()));
+      } else {
+        return Err(PidgitError::Io(err));
+      }
+    }
+
+    let raw = res.unwrap();
 
     if raw.starts_with("ref: ") {
       let symref = raw.trim_start_matches("ref: ");
@@ -339,19 +350,26 @@ impl Repository {
       ));
     }
 
+    if base.is_relative() {
+      return Err(PidgitError::Generic("absolute path required".to_string()));
+    }
+
     let mut dir_entries = vec![];
 
-    let relativize =
-      |p: &PathBuf| p.strip_prefix(&self.work_tree).unwrap().to_path_buf();
+    let relativize = |p: &PathBuf| {
+      p.canonicalize()
+        .expect("bad canonicalize")
+        .strip_prefix(&self.work_tree)
+        .unwrap()
+        .to_path_buf()
+    };
 
-    let abs_base = base.canonicalize()?;
-
-    if abs_base.is_file() {
-      dir_entries.push(relativize(&abs_base));
+    if base.is_file() {
+      dir_entries.push(relativize(&base));
       return Ok(dir_entries);
     }
 
-    for e in std::fs::read_dir(abs_base)?.filter_map(std::result::Result::ok) {
+    for e in std::fs::read_dir(base)?.filter_map(std::result::Result::ok) {
       let path = e.path();
 
       if self.ignore.contains(path.file_name().unwrap()) {
@@ -376,5 +394,49 @@ impl Repository {
     });
 
     Ok(dir_entries)
+  }
+
+  pub fn canonicalize(&self, path: &PathBuf) -> Result<PathBuf> {
+    Ok(self.work_tree.canonicalize()?.join(path))
+  }
+
+  pub fn commit(
+    &self,
+    message: &str,
+    author: Person,
+    committer: Person,
+  ) -> Result<Commit> {
+    let head = self.resolve_object("HEAD").ok();
+
+    let parents = if let Some(head) = head {
+      vec![head.into_inner().sha().hexdigest()]
+    } else {
+      vec![]
+    };
+
+    let mut msg = message.to_string();
+
+    if !msg.ends_with("\n") {
+      msg.push_str("\n");
+    }
+
+    let index = self.index()?;
+    let tree = Tree::from(&index);
+
+    let commit = Commit {
+      tree: tree.sha().hexdigest(),
+      parent_shas: parents,
+      author,
+      committer,
+      message: msg,
+      content: None,
+    };
+
+    // we write the tree, then write the commit.
+    self.write_tree(&tree)?;
+    self.write_object(&commit)?;
+    self.update_head(&commit.sha())?;
+
+    Ok(commit)
   }
 }
