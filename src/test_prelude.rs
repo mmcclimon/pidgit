@@ -1,5 +1,6 @@
 // prelude for easy testing
 pub use super::errors::{PidgitError, Result};
+pub use crate as pidgit;
 pub use assert_fs::prelude::*;
 pub use assert_fs::TempDir;
 pub use predicates::prelude::*;
@@ -30,20 +31,9 @@ pub fn new_empty_repo() -> TestRepo {
   TestRepo { dir, repo }
 }
 
-pub fn run_pidgit(args: Vec<&str>, repo: Option<&Repository>) -> Result<String> {
-  let app = super::new();
-  let mut stdout = Cursor::new(vec![]);
-
-  let full_args = std::iter::once("pidgit").chain(args);
-  let matches = app.clap_app().get_matches_from_safe(full_args)?;
-
-  app.dispatch(&matches, repo, &mut stdout)?;
-  Ok(String::from_utf8(stdout.into_inner())?)
-}
-
 impl TestRepo {
   pub fn run_pidgit(&self, args: Vec<&str>) -> Result<String> {
-    let app = super::new();
+    let app = pidgit::new();
     let mut stdout = Cursor::new(vec![]);
 
     let full_args = std::iter::once("pidgit").chain(args);

@@ -44,7 +44,8 @@ mod tests {
 
   #[test]
   fn init_help() {
-    let res = run_pidgit(vec!["init", "--help"], None);
+    let tr = new_empty_repo();
+    let res = tr.run_pidgit(vec!["init", "--help"]);
 
     if let Err(PidgitError::Clap(err)) = res {
       let help = err.message;
@@ -69,12 +70,21 @@ mod tests {
   fn init_create_dir() -> Result<()> {
     use predicate::path::is_dir;
     use predicate::str::contains;
+    use std::io::Cursor;
 
     let dir = tempdir();
     std::env::set_current_dir(&dir.path())?;
 
-    let stdout = run_pidgit(vec!["init"], None)?;
-    assert!(stdout.contains("initialized empty pidgit repository"));
+    // this is silly, but this test is also like, the only place we need to run
+    // outside of a repository
+    let app = pidgit::new();
+    let mut stdout = Cursor::new(vec![]);
+    let matches = app.clap_app().get_matches_from_safe(&["pidgit", "init"])?;
+
+    app.dispatch(&matches, None, &mut stdout)?;
+
+    let out = String::from_utf8(stdout.into_inner())?;
+    assert!(out.contains("initialized empty pidgit repository"));
 
     let ppath = dir.child(".pidgit");
 
