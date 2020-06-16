@@ -310,12 +310,11 @@ impl Index {
 }
 
 impl IndexEntry {
-  pub fn new(path: &PathBuf) -> Result<Self> {
-    let name = path.to_string_lossy().into_owned();
+  pub fn new(key: String, path: &PathBuf) -> Result<Self> {
     let meta = path.metadata()?;
     let sha = util::compute_sha_for_path(path)?.hexdigest();
 
-    Ok(Self::new_from_data(name, sha, meta))
+    Ok(Self::new_from_data(key, sha, meta))
   }
 
   pub fn new_from_data(
@@ -437,8 +436,8 @@ mod tests {
     let dir = tempdir();
     let f = dir.child("foo.txt");
     f.write_str("").unwrap();
-    let entry =
-      IndexEntry::new(&f.path().to_path_buf()).expect("couldn't create entry");
+    let entry = IndexEntry::new("foo.txt".to_string(), &f.path().to_path_buf())
+      .expect("couldn't create entry");
 
     assert_eq!(entry.mode, 0o100644);
     assert_eq!(entry.sha, EMPTY_SHA);

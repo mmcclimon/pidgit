@@ -81,7 +81,7 @@ mod tests {
     let mut stdout = Cursor::new(vec![]);
     let matches = app.clap_app().get_matches_from_safe(&["pidgit", "init"])?;
 
-    app.dispatch(&matches, None, &mut stdout)?;
+    app.dispatch(&matches, None, &mut stdout, std::env::current_dir()?)?;
 
     let out = String::from_utf8(stdout.into_inner())?;
     assert!(out.contains("initialized empty pidgit repository"));

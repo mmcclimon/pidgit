@@ -25,15 +25,22 @@ impl Command for Add {
 
   fn run(&self, matches: &ArgMatches, ctx: &Context) -> Result<()> {
     let repo = ctx.repo()?;
+
     let mut index = repo.index()?;
 
     for raw_path in matches.values_of("pathspec").unwrap() {
-      let base = PathBuf::from(raw_path); // .canonicalize()?;
+      let pb = PathBuf::from(raw_path);
+      let base = if pb.is_absolute() {
+        pb.canonicalize()?
+      } else {
+        ctx.pwd.join(raw_path).canonicalize()?
+      };
 
       for path in repo.list_files_from_base(&base)? {
-        let entry = IndexEntry::new(&path)?;
+        let key = path.to_string_lossy().into_owned();
+        let entry = IndexEntry::new(key, &repo.canonicalize(&path)?)?;
 
-        let blob = Blob::from_path(&path)?;
+        let blob = Blob::from_path(&ctx.pwd.join(&path))?;
         repo.write_object(&blob)?;
 
         index.add(entry);

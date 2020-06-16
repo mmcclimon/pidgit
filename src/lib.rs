@@ -30,6 +30,7 @@ use crate::cmd::{CommandSet, Context};
 use crate::errors::Result;
 use crate::repo::Repository;
 use clap::{crate_version, App, AppSettings, ArgMatches};
+use std::path::PathBuf;
 
 pub struct PidgitApp {
   commands: CommandSet,
@@ -63,6 +64,7 @@ impl PidgitApp {
     app_matches: &ArgMatches,
     repo: Option<&Repository>,
     writer: W,
+    pwd: PathBuf,
   ) -> Result<()>
   where
     W: std::io::Write,
@@ -71,7 +73,7 @@ impl PidgitApp {
     let cmd = self.commands.command_named(cmd_name); // might panic
     let matches = app_matches.subcommand_matches(cmd_name).unwrap();
 
-    let ctx = Context::new(repo, writer);
+    let ctx = Context::new(repo, writer, pwd);
 
     cmd.run(matches, &ctx)?;
 

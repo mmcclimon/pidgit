@@ -1,6 +1,6 @@
 use crate::prelude::*;
 use clap::ArgMatches;
-use std::{cell::RefCell, collections::BTreeMap};
+use std::{cell::RefCell, collections::BTreeMap, path::PathBuf};
 
 mod add;
 mod cat_file;
@@ -17,6 +17,7 @@ pub type App = clap::App<'static, 'static>;
 pub struct Context<'w> {
   writer: RefCell<Box<dyn std::io::Write + 'w>>,
   repo:   Option<&'w Repository>,
+  pwd:    PathBuf,
 }
 
 pub struct CommandSet {
@@ -56,13 +57,14 @@ pub trait Command: std::fmt::Debug {
 }
 
 impl<'w> Context<'w> {
-  pub fn new<W>(repo: Option<&'w Repository>, writer: W) -> Self
+  pub fn new<W>(repo: Option<&'w Repository>, writer: W, pwd: PathBuf) -> Self
   where
     W: std::io::Write + 'w,
   {
     Self {
       repo,
       writer: RefCell::new(Box::new(writer)),
+      pwd,
     }
   }
 
