@@ -17,8 +17,8 @@ impl Command for LsFiles {
   }
 
   fn run(&self, _matches: &ArgMatches, ctx: &Context) -> Result<()> {
-    for entry in ctx.repo()?.list_files()? {
-      ctx.println(format!("{}", entry.display()));
+    for key in ctx.repo()?.index()?.keys() {
+      ctx.println(format!("{}", key));
     }
 
     Ok(())

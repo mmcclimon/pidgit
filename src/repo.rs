@@ -25,10 +25,15 @@ const CONFIG: &str = "\
 
 #[derive(Debug)]
 pub struct Repository {
-  work_tree: PathBuf,
+  workspace: Workspace,
   git_dir:   PathBuf,
-  ignore:    HashSet<OsString>,
-  ftignore:  HashSet<OsString>,
+}
+
+#[derive(Debug)]
+pub struct Workspace {
+  path:     PathBuf,
+  ignore:   HashSet<OsString>,
+  ftignore: HashSet<OsString>,
 }
 
 // TODO for later
@@ -57,11 +62,15 @@ impl Repository {
       )));
     }
 
+    let workspace = Workspace {
+      path:     dir.canonicalize()?.to_path_buf(),
+      ignore:   default_ignore(),
+      ftignore: default_ftignore(),
+    };
+
     Ok(Repository {
-      work_tree: dir.canonicalize()?.to_path_buf(),
-      git_dir:   dir.join(GIT_DIR_NAME),
-      ignore:    default_ignore(),
-      ftignore:  default_ftignore(),
+      workspace,
+      git_dir: dir.join(GIT_DIR_NAME),
     })
   }
 
@@ -75,11 +84,15 @@ impl Repository {
       ))
     })?;
 
+    let workspace = Workspace {
+      path:     parent.to_path_buf(),
+      ignore:   default_ignore(),
+      ftignore: default_ftignore(),
+    };
+
     Ok(Repository {
-      work_tree: parent.to_path_buf(),
-      git_dir:   git_dir.to_path_buf(),
-      ignore:    default_ignore(),
-      ftignore:  default_ftignore(),
+      workspace,
+      git_dir: git_dir.to_path_buf(),
     })
   }
 
@@ -94,12 +107,13 @@ impl Repository {
     let git_dir = root.canonicalize()?.join(GIT_DIR_NAME);
     DirBuilder::new().create(&git_dir)?;
 
-    let repo = Repository {
-      work_tree: root.canonicalize()?.to_path_buf(),
-      git_dir,
-      ignore: default_ignore(),
+    let workspace = Workspace {
+      path:     root.canonicalize()?.to_path_buf(),
+      ignore:   default_ignore(),
       ftignore: default_ftignore(),
     };
+
+    let repo = Repository { workspace, git_dir };
 
     // HEAD
     let mut head = repo.create_file("HEAD")?;
@@ -123,12 +137,12 @@ impl Repository {
     Ok(repo)
   }
 
-  pub fn work_tree(&self) -> &PathBuf {
-    &self.work_tree
-  }
-
   pub fn git_dir(&self) -> &PathBuf {
     &self.git_dir
+  }
+
+  pub fn workspace(&self) -> &Workspace {
+    &self.workspace
   }
 
   // given a path relative to git_dir, create that file
@@ -301,18 +315,6 @@ impl Repository {
     Ok(())
   }
 
-  pub fn as_tree(&self) -> Result<Tree> {
-    use crate::object::PathEntry;
-
-    let entries = self
-      .list_files()?
-      .iter()
-      .filter_map(|entry| PathEntry::from_path(&entry).ok())
-      .collect::<Vec<_>>();
-
-    Ok(Tree::build(entries))
-  }
-
   pub fn write_tree(&self, tree: &Tree) -> Result<()> {
     tree.traverse(&|t| self.write_object(t))
   }
@@ -337,67 +339,6 @@ impl Repository {
     lock.commit()?;
 
     Ok(())
-  }
-
-  pub fn list_files(&self) -> Result<Vec<PathBuf>> {
-    self.list_files_from_base(&self.work_tree)
-  }
-
-  pub fn list_files_from_base(&self, base: &PathBuf) -> Result<Vec<PathBuf>> {
-    if !base.exists() {
-      return Err(PidgitError::PathspecNotFound(
-        base.as_os_str().to_os_string(),
-      ));
-    }
-
-    if base.is_relative() {
-      return Err(PidgitError::Generic("absolute path required".to_string()));
-    }
-
-    let mut dir_entries = vec![];
-
-    let relativize = |p: &PathBuf| {
-      p.canonicalize()
-        .expect("bad canonicalize")
-        .strip_prefix(&self.work_tree)
-        .unwrap()
-        .to_path_buf()
-    };
-
-    if base.is_file() {
-      dir_entries.push(relativize(&base));
-      return Ok(dir_entries);
-    }
-
-    for e in std::fs::read_dir(base)?.filter_map(std::result::Result::ok) {
-      let path = e.path();
-
-      if self.ignore.contains(path.file_name().unwrap()) {
-        continue;
-      }
-
-      if let Some(ext) = path.extension() {
-        if self.ftignore.contains(ext) {
-          continue;
-        }
-      }
-
-      if path.is_dir() {
-        dir_entries.extend(self.list_files_from_base(&path)?);
-      } else {
-        dir_entries.push(relativize(&path));
-      }
-    }
-
-    dir_entries.sort_unstable_by(|a, b| {
-      format!("{}", a.display()).cmp(&format!("{}", b.display()))
-    });
-
-    Ok(dir_entries)
-  }
-
-  pub fn canonicalize(&self, path: &PathBuf) -> Result<PathBuf> {
-    Ok(self.work_tree.canonicalize()?.join(path))
   }
 
   pub fn commit(
@@ -438,5 +379,73 @@ impl Repository {
     self.update_head(&commit.sha())?;
 
     Ok(commit)
+  }
+}
+
+impl Workspace {
+  pub fn root(&self) -> &PathBuf {
+    &self.path
+  }
+
+  // give a path relative to the top of the work tree, canonicalize it.
+  pub fn canonicalize(&self, path: &PathBuf) -> PathBuf {
+    self.path.join(path)
+  }
+
+  pub fn list_files(&self) -> Result<Vec<PathBuf>> {
+    self.list_files_from_base(&self.path)
+  }
+
+  pub fn list_files_from_base(&self, base: &PathBuf) -> Result<Vec<PathBuf>> {
+    if !base.exists() {
+      return Err(PidgitError::PathspecNotFound(
+        base.as_os_str().to_os_string(),
+      ));
+    }
+
+    if base.is_relative() {
+      return Err(PidgitError::Generic("absolute path required".to_string()));
+    }
+
+    let mut dir_entries = vec![];
+
+    let relativize = |p: &PathBuf| {
+      p.canonicalize()
+        .expect("bad canonicalize")
+        .strip_prefix(&self.path)
+        .unwrap()
+        .to_path_buf()
+    };
+
+    if base.is_file() {
+      dir_entries.push(relativize(&base));
+      return Ok(dir_entries);
+    }
+
+    for e in std::fs::read_dir(base)?.filter_map(std::result::Result::ok) {
+      let path = e.path();
+
+      if self.ignore.contains(path.file_name().unwrap()) {
+        continue;
+      }
+
+      if let Some(ext) = path.extension() {
+        if self.ftignore.contains(ext) {
+          continue;
+        }
+      }
+
+      if path.is_dir() {
+        dir_entries.extend(self.list_files_from_base(&path)?);
+      } else {
+        dir_entries.push(relativize(&path));
+      }
+    }
+
+    dir_entries.sort_unstable_by(|a, b| {
+      format!("{}", a.display()).cmp(&format!("{}", b.display()))
+    });
+
+    Ok(dir_entries)
   }
 }

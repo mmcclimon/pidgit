@@ -20,7 +20,7 @@ impl Command for Init {
       // maybe later: die if we can't initialize a repo from it
       ctx.println(format!(
         "{} already exists, nothing to do!",
-        repo.work_tree().display()
+        repo.workspace().root().display()
       ));
       return Ok(());
     }

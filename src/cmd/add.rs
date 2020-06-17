@@ -25,6 +25,7 @@ impl Command for Add {
 
   fn run(&self, matches: &ArgMatches, ctx: &Context) -> Result<()> {
     let repo = ctx.repo()?;
+    let workspace = repo.workspace();
 
     let mut index = repo.index()?;
 
@@ -36,9 +37,9 @@ impl Command for Add {
         ctx.pwd.join(raw_path).canonicalize()?
       };
 
-      for path in repo.list_files_from_base(&base)? {
+      for path in workspace.list_files_from_base(&base)? {
         let key = path.to_string_lossy().into_owned();
-        let entry = IndexEntry::new(key, &repo.canonicalize(&path)?)?;
+        let entry = IndexEntry::new(key, &workspace.canonicalize(&path))?;
 
         let blob = Blob::from_path(&ctx.pwd.join(&path))?;
         repo.write_object(&blob)?;

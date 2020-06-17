@@ -22,6 +22,7 @@ impl Command for Status {
     let index = repo.index()?;
 
     for f in repo
+      .workspace()
       .list_files()?
       .iter()
       .filter(|p| !index.is_tracked(&p.to_string_lossy()))

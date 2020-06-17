@@ -309,6 +309,10 @@ impl Index {
     self.entries.values()
   }
 
+  pub fn keys(&self) -> impl Iterator<Item = &String> {
+    self.entries.keys()
+  }
+
   pub fn num_entries(&self) -> u32 {
     self.entries.len() as u32
   }
