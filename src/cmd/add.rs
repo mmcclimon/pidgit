@@ -39,7 +39,7 @@ impl Command for Add {
 
       for path in workspace.list_files_from_base(&base)? {
         let entry =
-          IndexEntry::new(path.clone().into(), &workspace.canonicalize(&path))?;
+          IndexEntry::new(path.clone(), &workspace.canonicalize(&path))?;
 
         let blob = Blob::from_path(&ctx.pwd.join(&path))?;
         repo.write_object(&blob)?;

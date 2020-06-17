@@ -1,6 +1,6 @@
 use flate2::{write::ZlibEncoder, Compression};
 use sha1::Sha1;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::ffi::OsString;
 use std::fs::{DirBuilder, File};
 use std::io::prelude::*;
@@ -389,71 +389,40 @@ impl Workspace {
   }
 
   // give a path relative to the top of the work tree, canonicalize it.
-  pub fn canonicalize(&self, path: &PathBuf) -> PathBuf {
+  pub fn canonicalize<P>(&self, path: &P) -> PathBuf
+  where
+    P: AsRef<Path>,
+  {
     self.path.join(path)
   }
 
-  pub fn list_files(&self) -> Result<Vec<PathBuf>> {
+  pub fn list_files(&self) -> Result<BTreeSet<OsString>> {
     self.list_files_from_base(&self.path)
   }
 
-  pub fn list_files_from_base(&self, base: &PathBuf) -> Result<Vec<PathBuf>> {
-    if !base.exists() {
-      return Err(PidgitError::PathspecNotFound(
-        base.as_os_str().to_os_string(),
-      ));
-    }
+  pub fn list_files_from_base(
+    &self,
+    base: &PathBuf,
+  ) -> Result<BTreeSet<OsString>> {
+    let mut entries = BTreeSet::new();
 
-    if base.is_relative() {
-      return Err(PidgitError::Generic("absolute path required".to_string()));
-    }
+    let list = self.list_dir(base)?;
 
-    let mut dir_entries = vec![];
-
-    let relativize = |p: &PathBuf| {
-      p.canonicalize()
-        .expect("bad canonicalize")
-        .strip_prefix(&self.path)
-        .unwrap()
-        .to_path_buf()
-    };
-
-    if base.is_file() {
-      dir_entries.push(relativize(&base));
-      return Ok(dir_entries);
-    }
-
-    for e in std::fs::read_dir(base)?.filter_map(std::result::Result::ok) {
-      let path = e.path();
-
-      if self.ignore.contains(path.file_name().unwrap()) {
-        continue;
-      }
-
-      if let Some(ext) = path.extension() {
-        if self.ftignore.contains(ext) {
-          continue;
-        }
-      }
-
-      if path.is_dir() {
-        dir_entries.extend(self.list_files_from_base(&path)?);
+    for (pathstr, stat) in list {
+      if stat.is_dir() {
+        entries.extend(self.list_files_from_base(&self.path.join(pathstr))?);
       } else {
-        dir_entries.push(relativize(&path));
+        entries.insert(pathstr);
       }
     }
 
-    dir_entries.sort_unstable_by(|a, b| {
-      format!("{}", a.display()).cmp(&format!("{}", b.display()))
-    });
-
-    Ok(dir_entries)
+    Ok(entries)
   }
 
   pub fn list_dir(
     &self,
     base: &PathBuf,
-  ) -> Result<HashMap<PathBuf, std::fs::Metadata>> {
+  ) -> Result<BTreeMap<OsString, std::fs::Metadata>> {
     if !base.exists() {
       return Err(PidgitError::PathspecNotFound(
         base.as_os_str().to_os_string(),
@@ -464,7 +433,7 @@ impl Workspace {
       return Err(PidgitError::Generic("absolute path required".to_string()));
     }
 
-    let mut ret = HashMap::new();
+    let mut ret = BTreeMap::new();
 
     let relativize = |p: &PathBuf| {
       p.canonicalize()
@@ -475,7 +444,7 @@ impl Workspace {
     };
 
     if base.is_file() {
-      ret.insert(relativize(&base), base.metadata()?);
+      ret.insert(relativize(&base).into(), base.metadata()?);
       return Ok(ret);
     }
 
@@ -492,7 +461,7 @@ impl Workspace {
         }
       }
 
-      ret.insert(relativize(&path), path.metadata()?);
+      ret.insert(relativize(&path).into(), path.metadata()?);
     }
 
     Ok(ret)
