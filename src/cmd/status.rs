@@ -1,4 +1,6 @@
 use clap::{App, ArgMatches};
+use std::collections::BTreeSet;
+use std::path::PathBuf;
 
 use crate::cmd::Context;
 use crate::prelude::*;
@@ -19,15 +21,43 @@ impl Command for Status {
   fn run(&self, _matches: &ArgMatches, ctx: &Context) -> Result<()> {
     let repo = ctx.repo()?;
 
-    let index = repo.index()?;
+    let mut untracked = BTreeSet::new();
+    let workspace = repo.workspace();
 
-    for f in repo
-      .workspace()
-      .list_files()?
-      .iter()
-      .filter(|p| !index.is_tracked(&p.to_string_lossy()))
-    {
-      ctx.println(format!("?? {}", f.display()));
+    self.scan_workspace(workspace.root(), repo, &mut untracked)?;
+
+    for spec in untracked {
+      ctx.println(format!("?? {}", spec));
+    }
+
+    Ok(())
+  }
+}
+
+impl Status {
+  fn scan_workspace(
+    &self,
+    base: &PathBuf,
+    repo: &Repository,
+    untracked: &mut BTreeSet<String>,
+  ) -> Result<()> {
+    let ws = repo.workspace();
+    for path in ws.list_dir(base)? {
+      let is_dir = ws.stat(&path)?.is_dir();
+
+      if repo.index()?.is_path_tracked(&path) {
+        if is_dir {
+          self.scan_workspace(&ws.canonicalize(&path), repo, untracked)?;
+        }
+      } else {
+        let suffix = if is_dir {
+          std::path::MAIN_SEPARATOR.to_string()
+        } else {
+          "".to_string()
+        };
+
+        untracked.insert(format!("{}{}", path.display(), suffix));
+      }
     }
 
     Ok(())
@@ -63,5 +93,16 @@ mod tests {
     let stdout = tr.run_pidgit(vec!["status"]).unwrap();
     assert!(stdout.contains("?? file.txt"));
     assert!(!stdout.contains("?? committed.txt"));
+  }
+
+  #[test]
+  fn untracked_dirs() {
+    let tr = new_empty_repo();
+    tr.write_file("file.txt", "top-level file");
+    tr.write_file("dir/nested.txt", "nested file");
+
+    let stdout = tr.run_pidgit(vec!["status"]).unwrap();
+    assert!(stdout.contains("?? dir/\n"));
+    assert!(stdout.contains("?? file.txt"));
   }
 }

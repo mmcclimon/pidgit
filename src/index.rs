@@ -53,6 +53,10 @@ fn index_error(s: &str) -> Result<()> {
   Err(PidgitError::Index(s.to_string()))
 }
 
+fn key_for_path(path: &PathBuf) -> String {
+  path.to_string_lossy().into_owned()
+}
+
 impl Index {
   pub fn new(path: PathBuf) -> Self {
     let lockfile = Lockfile::new(path);
@@ -254,7 +258,7 @@ impl Index {
     self.remove_conflicts(&entry);
 
     for parent in entry.parents() {
-      let k = parent.to_string_lossy().into_owned();
+      let k = key_for_path(&parent);
       let mut set = self.parents.get_mut(&k);
 
       if set.is_none() {
@@ -270,8 +274,7 @@ impl Index {
 
   fn remove_conflicts(&mut self, entry: &IndexEntry) {
     for parent in entry.parents() {
-      let k = parent.to_string_lossy().into_owned();
-      self.remove_entry(&k);
+      self.remove_entry(&key_for_path(&parent));
     }
 
     self.remove_children(entry);
@@ -282,7 +285,7 @@ impl Index {
 
     if let Some(entry) = entry {
       for parent in entry.parents() {
-        let k = parent.to_string_lossy().into_owned();
+        let k = key_for_path(&parent);
         let children = self.parents.get_mut(&k).unwrap();
         children.remove(&entry.name);
 
@@ -319,6 +322,10 @@ impl Index {
 
   pub fn is_tracked(&self, key: &str) -> bool {
     self.entries.contains_key(key)
+  }
+
+  pub fn is_path_tracked(&self, relpath: &PathBuf) -> bool {
+    self.is_tracked(&key_for_path(relpath))
   }
 }
 

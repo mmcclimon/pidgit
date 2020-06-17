@@ -448,4 +448,57 @@ impl Workspace {
 
     Ok(dir_entries)
   }
+
+  pub fn list_dir(&self, base: &PathBuf) -> Result<Vec<PathBuf>> {
+    if !base.exists() {
+      return Err(PidgitError::PathspecNotFound(
+        base.as_os_str().to_os_string(),
+      ));
+    }
+
+    if base.is_relative() {
+      return Err(PidgitError::Generic("absolute path required".to_string()));
+    }
+
+    let mut dir_entries = vec![];
+
+    let relativize = |p: &PathBuf| {
+      p.canonicalize()
+        .expect("bad canonicalize")
+        .strip_prefix(&self.path)
+        .unwrap()
+        .to_path_buf()
+    };
+
+    if base.is_file() {
+      dir_entries.push(relativize(&base));
+      return Ok(dir_entries);
+    }
+
+    for e in std::fs::read_dir(base)?.filter_map(std::result::Result::ok) {
+      let path = e.path();
+
+      if self.ignore.contains(path.file_name().unwrap()) {
+        continue;
+      }
+
+      if let Some(ext) = path.extension() {
+        if self.ftignore.contains(ext) {
+          continue;
+        }
+      }
+
+      dir_entries.push(relativize(&path));
+    }
+
+    dir_entries.sort_unstable_by(|a, b| {
+      format!("{}", a.display()).cmp(&format!("{}", b.display()))
+    });
+
+    Ok(dir_entries)
+  }
+
+  pub fn stat(&self, relpath: &PathBuf) -> Result<std::fs::Metadata> {
+    Ok(self.canonicalize(relpath).metadata()?)
+  }
 }
