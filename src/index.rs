@@ -323,11 +323,7 @@ impl Index {
   }
 
   pub fn is_tracked(&self, key: &OsStr) -> bool {
-    self.entries.contains_key(key)
-  }
-
-  pub fn is_path_tracked(&self, relpath: &PathBuf) -> bool {
-    self.is_tracked(&key_for_path(relpath))
+    self.entries.contains_key(key) || self.parents.contains_key(key)
   }
 }
 
