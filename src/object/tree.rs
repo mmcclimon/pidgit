@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::ffi::OsString;
 use std::fmt;
 use std::path::PathBuf;
 
@@ -9,7 +10,7 @@ use crate::prelude::*;
 
 pub struct Tree {
   entries:      HashMap<PathBuf, TreeItem>,
-  label:        String,
+  label:        OsString,
   ordered_keys: Vec<PathBuf>,
 }
 
@@ -73,7 +74,7 @@ impl GitObject for Tree {
 }
 
 impl Tree {
-  pub fn new(label: String) -> Self {
+  pub fn new(label: OsString) -> Self {
     Self {
       entries: HashMap::new(),
       label,
@@ -84,6 +85,7 @@ impl Tree {
   pub fn from_content(content: Vec<u8>) -> Self {
     use std::io::prelude::*;
     use std::io::Cursor;
+    use std::os::unix::ffi::OsStringExt;
 
     let err = "malformed tree entry";
 
@@ -108,12 +110,12 @@ impl Tree {
 
       let mode_str = format!("{:0>6}", String::from_utf8(mode).expect(err));
 
-      let p = String::from_utf8_lossy(&filename);
+      let p = OsString::from_vec(filename);
 
       entries.push(PathEntry {
         mode: mode_str,
         sha:  hex::encode(sha),
-        path: PathBuf::from(p.to_string()),
+        path: p.into(),
       });
     }
 
@@ -122,7 +124,7 @@ impl Tree {
 
   // assumes entries are correctly sorted!
   pub fn build(entries: Vec<PathEntry>) -> Self {
-    let mut root = Tree::new("".to_string());
+    let mut root = Tree::new("".into());
 
     for entry in entries {
       let parents = entry.parents();
@@ -146,11 +148,11 @@ impl Tree {
     let key = parents[0].clone();
 
     if !self.entries.contains_key(&key) {
-      let label = key.file_name().unwrap().to_string_lossy();
+      let label = OsString::from(key.file_name().unwrap());
       self.ordered_keys.push(key.clone());
       self
         .entries
-        .insert(key.clone(), TreeItem::Tree(Tree::new(label.into_owned())));
+        .insert(key.clone(), TreeItem::Tree(Tree::new(label)));
     }
 
     if let TreeItem::Tree(tree) = self.entries.get_mut(&key).unwrap() {
@@ -172,7 +174,10 @@ impl Tree {
   }
 
   pub fn as_entry_bytes(&self) -> Vec<u8> {
-    let mut ret = format!("40000 {}\0", self.label).as_bytes().to_vec();
+    use std::os::unix::ffi::OsStrExt;
+    let mut ret = "40000 ".as_bytes().to_vec();
+    ret.extend(self.label.as_bytes());
+    ret.push(0);
     ret.extend(self.sha().digest().bytes().iter());
     ret
   }
@@ -180,13 +185,14 @@ impl Tree {
 
 impl PathEntry {
   pub fn as_entry_bytes(&self) -> Vec<u8> {
-    let mut ret = format!(
-      "{} {}\0",
-      self.mode.trim_start_matches("0"),
-      self.path.file_name().unwrap().to_string_lossy(),
-    )
-    .as_bytes()
-    .to_vec();
+    use std::os::unix::ffi::OsStrExt;
+
+    let mut ret = format!("{} ", self.mode.trim_start_matches("0"),)
+      .as_bytes()
+      .to_vec();
+
+    ret.extend(self.path.file_name().unwrap().as_bytes());
+    ret.push(0);
     ret.extend(hex::decode(&self.sha).unwrap());
     ret
   }
@@ -284,14 +290,14 @@ impl TreeItem {
         "040000",
         "tree",
         tree.sha().hexdigest(),
-        tree.label,
+        PathBuf::from(&tree.label).display(),
       ),
       TreeItem::Entry(e) => format!(
         "{} {} {}    {}",
         e.mode,
         "blob",
         e.sha,
-        e.path.file_name().unwrap().to_string_lossy(),
+        PathBuf::from(e.path.file_name().unwrap()).display(),
       ),
     }
   }

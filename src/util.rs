@@ -33,7 +33,7 @@ pub fn find_repo() -> Option<Repository> {
 pub fn sha_from_path(path: &Path) -> String {
   let hunks = path
     .components()
-    .map(|c| c.as_os_str().to_string_lossy())
+    .map(|c| c.as_os_str().to_str().unwrap())
     .collect::<Vec<_>>();
 
   let l = hunks.len();

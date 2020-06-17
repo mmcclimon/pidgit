@@ -1,6 +1,6 @@
 use flate2::{write::ZlibEncoder, Compression};
 use sha1::Sha1;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::ffi::OsString;
 use std::fs::{DirBuilder, File};
 use std::io::prelude::*;
@@ -292,7 +292,8 @@ impl Repository {
         path
           .file_name()
           .unwrap()
-          .to_string_lossy()
+          .to_str()
+          .unwrap()
           .starts_with(&rest)
       })
       .collect::<Vec<_>>();
@@ -449,7 +450,10 @@ impl Workspace {
     Ok(dir_entries)
   }
 
-  pub fn list_dir(&self, base: &PathBuf) -> Result<Vec<PathBuf>> {
+  pub fn list_dir(
+    &self,
+    base: &PathBuf,
+  ) -> Result<HashMap<PathBuf, std::fs::Metadata>> {
     if !base.exists() {
       return Err(PidgitError::PathspecNotFound(
         base.as_os_str().to_os_string(),
@@ -460,7 +464,7 @@ impl Workspace {
       return Err(PidgitError::Generic("absolute path required".to_string()));
     }
 
-    let mut dir_entries = vec![];
+    let mut ret = HashMap::new();
 
     let relativize = |p: &PathBuf| {
       p.canonicalize()
@@ -471,8 +475,8 @@ impl Workspace {
     };
 
     if base.is_file() {
-      dir_entries.push(relativize(&base));
-      return Ok(dir_entries);
+      ret.insert(relativize(&base), base.metadata()?);
+      return Ok(ret);
     }
 
     for e in std::fs::read_dir(base)?.filter_map(std::result::Result::ok) {
@@ -488,14 +492,10 @@ impl Workspace {
         }
       }
 
-      dir_entries.push(relativize(&path));
+      ret.insert(relativize(&path), path.metadata()?);
     }
 
-    dir_entries.sort_unstable_by(|a, b| {
-      format!("{}", a.display()).cmp(&format!("{}", b.display()))
-    });
-
-    Ok(dir_entries)
+    Ok(ret)
   }
 
   pub fn stat(&self, relpath: &PathBuf) -> Result<std::fs::Metadata> {

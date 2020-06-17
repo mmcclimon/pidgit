@@ -42,8 +42,8 @@ impl Status {
     untracked: &mut BTreeSet<String>,
   ) -> Result<()> {
     let ws = repo.workspace();
-    for path in ws.list_dir(base)? {
-      let is_dir = ws.stat(&path)?.is_dir();
+    for (path, stat) in ws.list_dir(base)? {
+      let is_dir = stat.is_dir();
 
       if repo.index()?.is_path_tracked(&path) {
         if is_dir {

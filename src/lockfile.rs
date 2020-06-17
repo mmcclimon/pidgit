@@ -95,7 +95,7 @@ impl<'l> std::io::Write for FileLock<'l> {
 mod tests {
   use super::*;
   use crate::test_prelude::*;
-  use std::ffi::OsStr;
+  use std::ffi::OsString;
   use std::io::prelude::*;
 
   fn new_lockfile(dir: &TempDir, name: &str) -> Lockfile {
@@ -105,20 +105,16 @@ mod tests {
 
   #[test]
   fn create() {
-    fn string_from(s: &OsStr) -> String {
-      s.to_string_lossy().to_string()
-    }
-
     let d = tempdir();
     let lockfile = new_lockfile(&d, "index");
     assert_eq!(
-      lockfile.path.file_name().map(|s| string_from(s)),
-      Some(String::from("index")),
+      lockfile.path.file_name(),
+      Some(OsString::from("index").as_os_str())
     );
 
     assert_eq!(
-      lockfile.lock_path.file_name().map(|s| string_from(s)),
-      Some(String::from("index.lock")),
+      lockfile.lock_path.file_name(),
+      Some(OsString::from("index.lock").as_os_str()),
     );
   }
 

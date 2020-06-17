@@ -1,4 +1,5 @@
 use clap::{App, ArgMatches};
+use std::path::PathBuf;
 
 use crate::cmd::Context;
 use crate::prelude::*;
@@ -18,7 +19,7 @@ impl Command for LsFiles {
 
   fn run(&self, _matches: &ArgMatches, ctx: &Context) -> Result<()> {
     for key in ctx.repo()?.index()?.keys() {
-      ctx.println(format!("{}", key));
+      ctx.println(format!("{}", PathBuf::from(key).display()));
     }
 
     Ok(())

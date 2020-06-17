@@ -1,7 +1,9 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::fs::File;
 use std::io::{prelude::*, BufWriter, Cursor};
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::path::PathBuf;
 
 use crate::prelude::*;
@@ -14,8 +16,8 @@ const MAX_PATH_SIZE: usize = 0xfff;
 pub struct Index {
   version:  u32,
   changed:  bool,
-  entries:  BTreeMap<String, IndexEntry>,
-  parents:  HashMap<String, HashSet<String>>,
+  entries:  BTreeMap<OsString, IndexEntry>,
+  parents:  HashMap<OsString, HashSet<OsString>>,
   lockfile: Lockfile,
 }
 
@@ -32,7 +34,7 @@ pub struct IndexEntry {
   size:       u32,
   pub sha:    String,
   flags:      u16,
-  pub name:   String,
+  pub name:   OsString,
 }
 
 impl fmt::Debug for IndexEntry {
@@ -53,8 +55,8 @@ fn index_error(s: &str) -> Result<()> {
   Err(PidgitError::Index(s.to_string()))
 }
 
-fn key_for_path(path: &PathBuf) -> String {
-  path.to_string_lossy().into_owned()
+fn key_for_path(path: &PathBuf) -> OsString {
+  path.into()
 }
 
 impl Index {
@@ -179,7 +181,7 @@ impl Index {
       let mut namebuf = vec![];
       reader.read_until(b'\0', &mut namebuf)?;
       namebuf.pop();
-      let name = String::from_utf8(namebuf)?;
+      let name = OsString::from_vec(namebuf);
 
       // 1-8 nul bytes as necessary to pad the entry to a multiple of eight bytes
       let len = reader.position() - start_pos;
@@ -280,7 +282,7 @@ impl Index {
     self.remove_children(entry);
   }
 
-  fn remove_entry(&mut self, key: &str) {
+  fn remove_entry(&mut self, key: &OsStr) {
     let entry = self.entries.remove(key);
 
     if let Some(entry) = entry {
@@ -312,7 +314,7 @@ impl Index {
     self.entries.values()
   }
 
-  pub fn keys(&self) -> impl Iterator<Item = &String> {
+  pub fn keys(&self) -> impl Iterator<Item = &OsString> {
     self.entries.keys()
   }
 
@@ -320,7 +322,7 @@ impl Index {
     self.entries.len() as u32
   }
 
-  pub fn is_tracked(&self, key: &str) -> bool {
+  pub fn is_tracked(&self, key: &OsStr) -> bool {
     self.entries.contains_key(key)
   }
 
@@ -330,7 +332,7 @@ impl Index {
 }
 
 impl IndexEntry {
-  pub fn new(key: String, path: &PathBuf) -> Result<Self> {
+  pub fn new(key: OsString, path: &PathBuf) -> Result<Self> {
     let meta = path.metadata()?;
     let sha = util::compute_sha_for_path(path)?.hexdigest();
 
@@ -338,7 +340,7 @@ impl IndexEntry {
   }
 
   pub fn new_from_data(
-    name: String,
+    name: OsString,
     sha: String,
     meta: std::fs::Metadata,
   ) -> Self {
@@ -389,7 +391,7 @@ impl IndexEntry {
     ret.extend(self.size.to_be_bytes().iter());
     ret.extend(hex::decode(&self.sha).unwrap());
     ret.extend(self.flags.to_be_bytes().iter());
-    ret.extend(self.name.as_bytes());
+    ret.extend(self.name.as_os_str().as_bytes());
     ret.push(0);
 
     // 1-8 nul bytes as necessary to pad the entry to a multiple of eight bytes
@@ -445,7 +447,7 @@ mod tests {
 
   fn new_empty_entry(basename: &str) -> IndexEntry {
     IndexEntry::new_from_data(
-      basename.to_string(),
+      basename.into(),
       EMPTY_SHA.to_string(),
       random_stat(),
     )
@@ -456,12 +458,12 @@ mod tests {
     let dir = tempdir();
     let f = dir.child("foo.txt");
     f.write_str("").unwrap();
-    let entry = IndexEntry::new("foo.txt".to_string(), &f.path().to_path_buf())
+    let entry = IndexEntry::new("foo.txt".into(), &f.path().to_path_buf())
       .expect("couldn't create entry");
 
     assert_eq!(entry.mode, 0o100644);
     assert_eq!(entry.sha, EMPTY_SHA);
-    assert!(entry.name.ends_with("foo.txt"));
+    assert!(entry.name.to_str().unwrap().ends_with("foo.txt"));
   }
 
   #[test]
