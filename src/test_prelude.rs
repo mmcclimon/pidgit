@@ -59,6 +59,21 @@ impl TestRepo {
     assert!(child.path().is_dir())
   }
 
+  pub fn chmod(&self, pathstr: &str, mode: u32) {
+    use std::os::unix::fs::PermissionsExt;
+    let child = self.dir.child(pathstr);
+    let path = child.path();
+    let mut perms = path.metadata().expect("bad stat").permissions();
+    perms.set_mode(mode);
+    std::fs::set_permissions(path, perms).expect("could not chmod");
+  }
+
+  #[rustfmt::skip]
+  pub fn commit_all(&self) {
+    self.run_pidgit(vec!["add", "."]).expect("bad add");
+    self.commit("auto commit message").expect("could not commit");
+  }
+
   pub fn commit(&self, message: &str) -> Result<()> {
     use crate::object::Person;
     use chrono::Local;

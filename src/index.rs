@@ -28,6 +28,7 @@ pub struct IndexEntry {
   pub sha:  String,
   flags:    u16,
   pub name: OsString,
+  changed:  bool,
 }
 
 #[derive(Eq, PartialEq)]
@@ -224,6 +225,7 @@ impl Index {
         sha: hex::encode(sha),
         flags,
         name,
+        changed: false,
       });
     }
 
@@ -233,8 +235,12 @@ impl Index {
     Ok(())
   }
 
+  fn has_changed(&self) -> bool {
+    self.changed || self.entries.values().any(|e| e.changed)
+  }
+
   pub fn write(&self) -> Result<()> {
-    if !self.changed {
+    if !self.has_changed() {
       // nothing to do!
       return Ok(());
     }
@@ -334,6 +340,10 @@ impl Index {
     self.entries.values()
   }
 
+  pub fn entries_mut(&mut self) -> impl Iterator<Item = &mut IndexEntry> {
+    self.entries.values_mut()
+  }
+
   pub fn keys(&self) -> impl Iterator<Item = &OsString> {
     self.entries.keys()
   }
@@ -350,7 +360,7 @@ impl Index {
 impl IndexEntry {
   pub fn new(key: OsString, path: &PathBuf) -> Result<Self> {
     let meta = path.metadata()?;
-    let sha = util::compute_sha_for_path(path)?.hexdigest();
+    let sha = util::compute_sha_for_path(path, Some(&meta))?.hexdigest();
 
     Ok(Self::new_from_data(key, sha, meta))
   }
@@ -374,6 +384,7 @@ impl IndexEntry {
       sha,
       flags,
       name,
+      changed: false,
     }
   }
 
@@ -414,10 +425,26 @@ impl IndexEntry {
     self.meta.mode
   }
 
-  // to be improved
+  // not perfect, obviously
   pub fn matches_stat(&self, stat: &Metadata) -> bool {
     let other = EntryMeta::from(stat);
-    self.meta.size == other.size
+    self.meta.size == other.size && self.meta.mode == other.mode
+  }
+
+  // not perfect, obviously
+  pub fn matches_time(&self, stat: &Metadata) -> bool {
+    let other = EntryMeta::from(stat);
+    let me = &self.meta;
+    me.ctime_sec == other.ctime_sec
+      && me.ctime_nano == other.ctime_nano
+      && me.mtime_sec == other.mtime_sec
+      && me.mtime_nano == other.mtime_nano
+  }
+
+  pub fn update_meta(&mut self, stat: &Metadata) {
+    let other = EntryMeta::from(stat);
+    self.meta = other;
+    self.changed = true;
   }
 }
 

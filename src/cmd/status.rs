@@ -13,7 +13,7 @@ struct Status;
 
 struct StatusHelper<'c> {
   repo:      &'c Repository,
-  index:     &'c Index,
+  index:     &'c mut Index,
   untracked: BTreeSet<OsString>,
   changed:   BTreeSet<OsString>,
   stats:     HashMap<OsString, Metadata>,
@@ -34,7 +34,7 @@ impl Command for Status {
 
     let mut helper = StatusHelper {
       repo,
-      index: &repo.index()?,
+      index: &mut repo.index()?,
       untracked: BTreeSet::new(),
       changed: BTreeSet::new(),
       stats: HashMap::new(),
@@ -52,6 +52,9 @@ impl Command for Status {
     for spec in helper.untracked {
       ctx.println(format!("?? {}", PathBuf::from(spec).display()));
     }
+
+    // update the index, in case any of the stats have changed
+    helper.index.write()?;
 
     Ok(())
   }
@@ -107,7 +110,7 @@ impl StatusHelper<'_> {
   fn detect_changes(&mut self) {
     // For every file in the index, if our stat is different than it, it's
     // changed.
-    for entry in self.index.entries() {
+    for entry in self.index.entries_mut() {
       let path = &entry.name;
       let stat = self
         .stats
@@ -115,6 +118,27 @@ impl StatusHelper<'_> {
         .expect(&format!("no stat for {:?}", path));
 
       if !entry.matches_stat(stat) {
+        self.changed.insert(path.clone());
+        continue;
+      }
+
+      if entry.matches_time(stat) {
+        continue;
+      }
+
+      // Check the content
+      let sha = util::compute_sha_for_path(
+        &self.repo.workspace().canonicalize(path),
+        Some(stat),
+      )
+      .expect("could not calculate sha")
+      .hexdigest();
+
+      if sha == entry.sha {
+        // if we've gotten here, we know the index stat time is stale
+        entry.update_meta(stat);
+        continue;
+      } else {
         self.changed.insert(path.clone());
       }
     }
@@ -144,10 +168,7 @@ mod tests {
   fn untracked_and_others() {
     let tr = new_empty_repo();
     tr.write_file("committed.txt", "to be committed");
-
-    #[rustfmt::skip]
-    tr.run_pidgit(vec!["add", "committed.txt"]).expect("bad add");
-    tr.commit("a commit message").expect("could not commit");
+    tr.commit_all();
 
     tr.write_file("file.txt", "uncommitted");
 
@@ -169,9 +190,7 @@ mod tests {
   fn untracked_dirs_nested() {
     let tr = new_empty_repo();
     tr.write_file("a/b/inner.txt", "nested file");
-
-    tr.run_pidgit(vec!["add", "."]).expect("bad add");
-    tr.commit("a commit message").expect("could not commit");
+    tr.commit_all();
 
     tr.write_file("a/outer.txt", "outer untracked file");
     tr.write_file("a/b/c/nested.txt", "more deeply nested file");
@@ -196,15 +215,37 @@ mod tests {
   #[test]
   fn simple_modification() {
     let tr = new_empty_repo();
-    tr.write_file("file.txt", "original_content\n");
-
-    tr.run_pidgit(vec!["add", "."]).expect("bad add");
-    tr.commit("a commit message").expect("could not commit");
+    tr.write_file("file.txt", "original content\n");
+    tr.commit_all();
 
     let stdout = tr.run_pidgit(vec!["status"]).unwrap();
     assert_eq!(stdout, "");
 
     tr.write_file("file.txt", "original_content\nplus another line\n");
+
+    let stdout = tr.run_pidgit(vec!["status"]).unwrap();
+    assert_status(stdout, " M file.txt");
+  }
+
+  #[test]
+  fn change_mode() {
+    let tr = new_empty_repo();
+    tr.write_file("file.txt", "original content\n");
+    tr.commit_all();
+
+    tr.chmod("file.txt", 0o755);
+
+    let stdout = tr.run_pidgit(vec!["status"]).unwrap();
+    assert_status(stdout, " M file.txt");
+  }
+
+  #[test]
+  fn modify_same_size() {
+    let tr = new_empty_repo();
+    tr.write_file("file.txt", "2 cats\n");
+    tr.commit_all();
+
+    tr.write_file("file.txt", "9 cats\n");
 
     let stdout = tr.run_pidgit(vec!["status"]).unwrap();
     assert_status(stdout, " M file.txt");

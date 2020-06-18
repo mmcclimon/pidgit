@@ -200,7 +200,8 @@ impl PathEntry {
   pub fn from_path(path: &PathBuf) -> Result<Self> {
     use std::os::unix::fs::PermissionsExt;
 
-    let perms = path.metadata()?.permissions();
+    let meta = path.metadata()?;
+    let perms = meta.permissions();
 
     let mode = if perms.mode() & 0o111 != 0 {
       "100755"
@@ -208,7 +209,7 @@ impl PathEntry {
       "100644"
     };
 
-    let sha = util::compute_sha_for_path(path)?;
+    let sha = util::compute_sha_for_path(path, Some(&meta))?;
 
     Ok(PathEntry {
       path: path.clone(),

@@ -1,4 +1,5 @@
 use sha1::Sha1;
+use std::fs::Metadata;
 use std::path::{Path, PathBuf};
 
 use crate::prelude::*;
@@ -41,15 +42,21 @@ pub fn sha_from_path(path: &Path) -> String {
 }
 
 // Get the sha for a file on disk, without reading the whole thing into memory.
-pub fn compute_sha_for_path(path: &Path) -> Result<Sha1> {
+pub fn compute_sha_for_path(
+  path: &Path,
+  meta: Option<&Metadata>,
+) -> Result<Sha1> {
   use std::fs::File;
   use std::io::{BufRead, BufReader};
 
   let mut reader = BufReader::new(File::open(&path)?);
   let mut sha = Sha1::new();
-  let meta = path.metadata()?;
+  let len = match meta {
+    Some(meta) => meta.len(),
+    None => path.metadata()?.len(),
+  };
 
-  sha.update(format!("blob {}\0", meta.len()).as_bytes());
+  sha.update(format!("blob {}\0", len).as_bytes());
 
   loop {
     let buf = reader.fill_buf()?;
