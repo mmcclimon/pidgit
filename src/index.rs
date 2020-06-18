@@ -2,8 +2,10 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::fs::File;
+use std::fs::Metadata;
 use std::io::{prelude::*, BufWriter, Cursor};
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
+use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 
 use crate::prelude::*;
@@ -22,19 +24,23 @@ pub struct Index {
 }
 
 pub struct IndexEntry {
+  meta:     EntryMeta,
+  pub sha:  String,
+  flags:    u16,
+  pub name: OsString,
+}
+
+pub struct EntryMeta {
   ctime_sec:  u32,
   ctime_nano: u32,
   mtime_sec:  u32,
   mtime_nano: u32,
   dev:        u32,
   ino:        u32,
-  pub mode:   u32,
+  mode:       u32,
   uid:        u32,
   gid:        u32,
   size:       u32,
-  pub sha:    String,
-  flags:      u16,
-  pub name:   OsString,
 }
 
 impl fmt::Debug for IndexEntry {
@@ -43,10 +49,19 @@ impl fmt::Debug for IndexEntry {
     f.debug_struct("IndexEntry")
       .field("name", &self.name)
       .field("sha", &self.sha)
+      .field("flags", &format_args!("{:018b}", &self.flags))
+      .field("meta",&format_args!("{:?}", self.meta))
+      .finish()
+  }
+}
+
+impl fmt::Debug for EntryMeta {
+  #[rustfmt::skip]
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    f.debug_struct("EntryMeta")
       .field("ctime",&format_args!("{}.{}", self.ctime_sec, self.ctime_nano))
       .field("mtime",&format_args!("{}.{}", self.mtime_sec, self.mtime_nano))
       .field("size", &self.size)
-      .field("flags", &format_args!("{:018b}", &self.flags))
       .finish()
   }
 }
@@ -190,7 +205,7 @@ impl Index {
         reader.seek(std::io::SeekFrom::Current(padding as i64))?;
       }
 
-      self.add(IndexEntry {
+      let meta = EntryMeta {
         ctime_sec,
         ctime_nano,
         mtime_sec,
@@ -201,6 +216,10 @@ impl Index {
         uid,
         gid,
         size,
+      };
+
+      self.add(IndexEntry {
+        meta,
         sha: hex::encode(sha),
         flags,
         name,
@@ -335,13 +354,7 @@ impl IndexEntry {
     Ok(Self::new_from_data(key, sha, meta))
   }
 
-  pub fn new_from_data(
-    name: OsString,
-    sha: String,
-    meta: std::fs::Metadata,
-  ) -> Self {
-    use std::os::unix::fs::MetadataExt;
-
+  pub fn new_from_data(name: OsString, sha: String, stat: Metadata) -> Self {
     let namelen = name.len();
 
     if namelen > MAX_PATH_SIZE {
@@ -353,17 +366,10 @@ impl IndexEntry {
     let mut flags = 0u16;
     flags = flags | (namelen as u16);
 
+    let meta = EntryMeta::from(&stat);
+
     IndexEntry {
-      ctime_sec: meta.ctime() as u32,
-      ctime_nano: meta.ctime_nsec() as u32,
-      mtime_sec: meta.mtime() as u32,
-      mtime_nano: meta.mtime_nsec() as u32,
-      dev: meta.dev() as u32,
-      ino: meta.ino() as u32,
-      mode: meta.mode(), // XXX is this right?
-      uid: meta.uid(),
-      gid: meta.gid(),
-      size: meta.size() as u32,
+      meta,
       sha,
       flags,
       name,
@@ -375,16 +381,7 @@ impl IndexEntry {
     let mut ret = Vec::with_capacity(100);
 
     // I think this is probably not very efficient.
-    ret.extend(self.ctime_sec.to_be_bytes().iter());
-    ret.extend(self.ctime_nano.to_be_bytes().iter());
-    ret.extend(self.mtime_sec.to_be_bytes().iter());
-    ret.extend(self.mtime_nano.to_be_bytes().iter());
-    ret.extend(self.dev.to_be_bytes().iter());
-    ret.extend(self.ino.to_be_bytes().iter());
-    ret.extend(self.mode.to_be_bytes().iter());
-    ret.extend(self.uid.to_be_bytes().iter());
-    ret.extend(self.gid.to_be_bytes().iter());
-    ret.extend(self.size.to_be_bytes().iter());
+    ret.extend(self.meta.as_bytes());
     ret.extend(hex::decode(&self.sha).unwrap());
     ret.extend(self.flags.to_be_bytes().iter());
     ret.extend(self.name.as_os_str().as_bytes());
@@ -410,6 +407,48 @@ impl IndexEntry {
     parents.reverse();
 
     parents
+  }
+
+  pub fn mode(&self) -> u32 {
+    self.meta.mode
+  }
+
+  pub fn differs_from(&self, stat: &Metadata) -> bool {
+    true
+  }
+}
+
+impl EntryMeta {
+  pub fn as_bytes(&self) -> Vec<u8> {
+    let mut ret = vec![];
+    ret.extend(self.ctime_sec.to_be_bytes().iter());
+    ret.extend(self.ctime_nano.to_be_bytes().iter());
+    ret.extend(self.mtime_sec.to_be_bytes().iter());
+    ret.extend(self.mtime_nano.to_be_bytes().iter());
+    ret.extend(self.dev.to_be_bytes().iter());
+    ret.extend(self.ino.to_be_bytes().iter());
+    ret.extend(self.mode.to_be_bytes().iter());
+    ret.extend(self.uid.to_be_bytes().iter());
+    ret.extend(self.gid.to_be_bytes().iter());
+    ret.extend(self.size.to_be_bytes().iter());
+    ret
+  }
+}
+
+impl From<&Metadata> for EntryMeta {
+  fn from(meta: &Metadata) -> Self {
+    Self {
+      ctime_sec:  meta.ctime() as u32,
+      ctime_nano: meta.ctime_nsec() as u32,
+      mtime_sec:  meta.mtime() as u32,
+      mtime_nano: meta.mtime_nsec() as u32,
+      dev:        meta.dev() as u32,
+      ino:        meta.ino() as u32,
+      mode:       meta.mode(), // XXX is this right?
+      uid:        meta.uid(),
+      gid:        meta.gid(),
+      size:       meta.size() as u32,
+    }
   }
 }
 
@@ -457,7 +496,7 @@ mod tests {
     let entry = IndexEntry::new("foo.txt".into(), &f.path().to_path_buf())
       .expect("couldn't create entry");
 
-    assert_eq!(entry.mode, 0o100644);
+    assert_eq!(entry.mode(), 0o100644);
     assert_eq!(entry.sha, EMPTY_SHA);
     assert!(entry.name.to_str().unwrap().ends_with("foo.txt"));
   }

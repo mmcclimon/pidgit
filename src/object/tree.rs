@@ -268,7 +268,7 @@ impl PartialEq for PathEntry {
 impl From<&IndexEntry> for PathEntry {
   fn from(entry: &IndexEntry) -> Self {
     Self {
-      mode: format!("{:0>6o}", entry.mode),
+      mode: format!("{:0>6o}", entry.mode()),
       path: PathBuf::from(entry.name.clone()),
       sha:  entry.sha.clone(),
     }
