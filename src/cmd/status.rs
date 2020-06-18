@@ -1,13 +1,20 @@
 use clap::{App, ArgMatches};
 use std::collections::BTreeSet;
 use std::ffi::OsString;
+use std::fs::Metadata;
 use std::path::PathBuf;
 
 use crate::cmd::Context;
+use crate::index::Index;
 use crate::prelude::*;
 
 #[derive(Debug)]
 struct Status;
+
+struct StatusHelper<'c> {
+  repo:  &'c Repository,
+  index: &'c Index,
+}
 
 pub fn new() -> Box<dyn Command> {
   Box::new(Status {})
@@ -22,10 +29,15 @@ impl Command for Status {
   fn run(&self, _matches: &ArgMatches, ctx: &Context) -> Result<()> {
     let repo = ctx.repo()?;
 
+    let helper = StatusHelper {
+      repo,
+      index: &repo.index()?,
+    };
+
     let mut untracked = BTreeSet::new();
     let workspace = repo.workspace();
 
-    self.scan_workspace(workspace.root(), repo, &mut untracked)?;
+    helper.scan_workspace(workspace.root(), &mut untracked)?;
 
     for spec in untracked {
       ctx.println(format!("?? {}", PathBuf::from(spec).display()));
@@ -35,22 +47,21 @@ impl Command for Status {
   }
 }
 
-impl Status {
+impl StatusHelper<'_> {
   fn scan_workspace(
     &self,
     base: &PathBuf,
-    repo: &Repository,
     untracked: &mut BTreeSet<OsString>,
   ) -> Result<()> {
-    let ws = repo.workspace();
+    let ws = self.repo.workspace();
     for (path_str, stat) in ws.list_dir(base)? {
       let is_dir = stat.is_dir();
 
-      if repo.index()?.is_tracked(&path_str) {
+      if self.index.is_tracked(&path_str) {
         if is_dir {
-          self.scan_workspace(&ws.canonicalize(&path_str), repo, untracked)?;
+          self.scan_workspace(&ws.canonicalize(&path_str), untracked)?;
         }
-      } else {
+      } else if self.is_trackable(&path_str, &stat) {
         let suffix = if is_dir {
           std::path::MAIN_SEPARATOR.to_string()
         } else {
@@ -65,6 +76,24 @@ impl Status {
     }
 
     Ok(())
+  }
+
+  // a path is trackable iff it contains a file somewhere inside it.
+  fn is_trackable(&self, path: &OsString, stat: &Metadata) -> bool {
+    if stat.is_file() {
+      return !self.index.is_tracked(&path);
+    }
+
+    if !stat.is_dir() {
+      return false;
+    }
+
+    let ws = self.repo.workspace();
+
+    ws.list_dir(&path.into())
+      .expect(&format!("could not list dir {:?}", path))
+      .iter()
+      .any(|(path, stat)| self.is_trackable(path, stat))
   }
 }
 
@@ -122,5 +151,18 @@ mod tests {
 
     let stdout = tr.run_pidgit(vec!["status"]).unwrap();
     assert_eq!(stdout, "?? a/b/c/\n?? a/outer.txt\n");
+  }
+
+  #[test]
+  fn no_empty_untracked_dirs() {
+    let tr = new_empty_repo();
+    tr.mkdir("outer");
+
+    let stdout = tr.run_pidgit(vec!["status"]).unwrap();
+    assert_eq!(stdout, "");
+
+    tr.write_file("outer/inner/file.txt", "a file");
+    let stdout = tr.run_pidgit(vec!["status"]).unwrap();
+    assert_eq!(stdout, "?? outer/\n");
   }
 }

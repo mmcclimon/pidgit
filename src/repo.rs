@@ -421,16 +421,18 @@ impl Workspace {
 
   pub fn list_dir(
     &self,
-    base: &PathBuf,
+    raw_base: &PathBuf,
   ) -> Result<BTreeMap<OsString, std::fs::Metadata>> {
+    let base = if raw_base.is_relative() {
+      self.canonicalize(&raw_base)
+    } else {
+      raw_base.clone()
+    };
+
     if !base.exists() {
       return Err(PidgitError::PathspecNotFound(
         base.as_os_str().to_os_string(),
       ));
-    }
-
-    if base.is_relative() {
-      return Err(PidgitError::Generic("absolute path required".to_string()));
     }
 
     let mut ret = BTreeMap::new();

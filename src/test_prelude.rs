@@ -53,6 +53,12 @@ impl TestRepo {
       .expect(&format!("could not write file at {}", filename));
   }
 
+  pub fn mkdir(&self, path: &str) {
+    let child = self.dir.child(path);
+    std::fs::create_dir_all(&child.path()).unwrap();
+    assert!(child.path().is_dir())
+  }
+
   pub fn commit(&self, message: &str) -> Result<()> {
     use crate::object::Person;
     use chrono::Local;
