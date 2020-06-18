@@ -1,5 +1,5 @@
 use clap::{App, ArgMatches};
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::ffi::OsString;
 use std::fs::Metadata;
 use std::path::PathBuf;
@@ -12,8 +12,11 @@ use crate::prelude::*;
 struct Status;
 
 struct StatusHelper<'c> {
-  repo:  &'c Repository,
-  index: &'c Index,
+  repo:      &'c Repository,
+  index:     &'c Index,
+  untracked: BTreeSet<OsString>,
+  changed:   BTreeSet<OsString>,
+  stats:     HashMap<OsString, Metadata>,
 }
 
 pub fn new() -> Box<dyn Command> {
@@ -29,17 +32,24 @@ impl Command for Status {
   fn run(&self, _matches: &ArgMatches, ctx: &Context) -> Result<()> {
     let repo = ctx.repo()?;
 
-    let helper = StatusHelper {
+    let mut helper = StatusHelper {
       repo,
       index: &repo.index()?,
+      untracked: BTreeSet::new(),
+      changed: BTreeSet::new(),
+      stats: HashMap::new(),
     };
 
-    let mut untracked = BTreeSet::new();
     let workspace = repo.workspace();
 
-    helper.scan_workspace(workspace.root(), &mut untracked)?;
+    helper.scan_workspace(workspace.root())?;
+    helper.detect_changes();
 
-    for spec in untracked {
+    for file in helper.changed {
+      ctx.println(format!(" M {}", PathBuf::from(file).display()));
+    }
+
+    for spec in helper.untracked {
       ctx.println(format!("?? {}", PathBuf::from(spec).display()));
     }
 
@@ -48,18 +58,16 @@ impl Command for Status {
 }
 
 impl StatusHelper<'_> {
-  fn scan_workspace(
-    &self,
-    base: &PathBuf,
-    untracked: &mut BTreeSet<OsString>,
-  ) -> Result<()> {
+  fn scan_workspace(&mut self, base: &PathBuf) -> Result<()> {
     let ws = self.repo.workspace();
     for (path_str, stat) in ws.list_dir(base)? {
       let is_dir = stat.is_dir();
 
       if self.index.is_tracked(&path_str) {
         if is_dir {
-          self.scan_workspace(&ws.canonicalize(&path_str), untracked)?;
+          self.scan_workspace(&ws.canonicalize(&path_str))?;
+        } else if stat.is_file() {
+          self.stats.insert(path_str.clone(), stat.clone());
         }
       } else if self.is_trackable(&path_str, &stat) {
         let suffix = if is_dir {
@@ -71,7 +79,7 @@ impl StatusHelper<'_> {
         let mut name = path_str.clone();
         name.push(suffix);
 
-        untracked.insert(name);
+        self.untracked.insert(name);
       }
     }
 
@@ -95,11 +103,32 @@ impl StatusHelper<'_> {
       .iter()
       .any(|(path, stat)| self.is_trackable(path, stat))
   }
+
+  fn detect_changes(&mut self) {
+    // For every file in the index, if our stat is different than it, it's
+    // changed.
+    for entry in self.index.entries() {
+      let path = &entry.name;
+      let stat = self
+        .stats
+        .get(path)
+        .expect(&format!("no stat for {:?}", path));
+
+      if !entry.matches_stat(stat) {
+        self.changed.insert(path.clone());
+      }
+    }
+  }
 }
 
 #[cfg(test)]
 mod tests {
   use crate::test_prelude::*;
+
+  fn assert_status(stdout: String, want: &str) {
+    let expect = want.to_string() + "\n";
+    assert_eq!(stdout, expect);
+  }
 
   #[test]
   fn only_untracked_files() {
@@ -108,8 +137,7 @@ mod tests {
     tr.write_file("other.txt", "more content");
 
     let stdout = tr.run_pidgit(vec!["status"]).unwrap();
-    assert!(stdout.contains("?? file.txt"));
-    assert!(stdout.contains("?? other.txt"));
+    assert_status(stdout, "?? file.txt\n?? other.txt");
   }
 
   #[test]
@@ -124,8 +152,7 @@ mod tests {
     tr.write_file("file.txt", "uncommitted");
 
     let stdout = tr.run_pidgit(vec!["status"]).unwrap();
-    assert!(stdout.contains("?? file.txt"));
-    assert!(!stdout.contains("?? committed.txt"));
+    assert_status(stdout, "?? file.txt");
   }
 
   #[test]
@@ -135,7 +162,7 @@ mod tests {
     tr.write_file("dir/nested.txt", "nested file");
 
     let stdout = tr.run_pidgit(vec!["status"]).unwrap();
-    assert_eq!(stdout, "?? dir/\n?? file.txt\n");
+    assert_status(stdout, "?? dir/\n?? file.txt");
   }
 
   #[test]
@@ -150,7 +177,7 @@ mod tests {
     tr.write_file("a/b/c/nested.txt", "more deeply nested file");
 
     let stdout = tr.run_pidgit(vec!["status"]).unwrap();
-    assert_eq!(stdout, "?? a/b/c/\n?? a/outer.txt\n");
+    assert_status(stdout, "?? a/b/c/\n?? a/outer.txt");
   }
 
   #[test]
@@ -163,6 +190,23 @@ mod tests {
 
     tr.write_file("outer/inner/file.txt", "a file");
     let stdout = tr.run_pidgit(vec!["status"]).unwrap();
-    assert_eq!(stdout, "?? outer/\n");
+    assert_status(stdout, "?? outer/");
+  }
+
+  #[test]
+  fn simple_modification() {
+    let tr = new_empty_repo();
+    tr.write_file("file.txt", "original_content\n");
+
+    tr.run_pidgit(vec!["add", "."]).expect("bad add");
+    tr.commit("a commit message").expect("could not commit");
+
+    let stdout = tr.run_pidgit(vec!["status"]).unwrap();
+    assert_eq!(stdout, "");
+
+    tr.write_file("file.txt", "original_content\nplus another line\n");
+
+    let stdout = tr.run_pidgit(vec!["status"]).unwrap();
+    assert_status(stdout, " M file.txt");
   }
 }

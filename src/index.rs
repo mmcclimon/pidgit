@@ -30,6 +30,7 @@ pub struct IndexEntry {
   pub name: OsString,
 }
 
+#[derive(Eq, PartialEq)]
 pub struct EntryMeta {
   ctime_sec:  u32,
   ctime_nano: u32,
@@ -413,8 +414,10 @@ impl IndexEntry {
     self.meta.mode
   }
 
-  pub fn differs_from(&self, stat: &Metadata) -> bool {
-    true
+  // to be improved
+  pub fn matches_stat(&self, stat: &Metadata) -> bool {
+    let other = EntryMeta::from(stat);
+    self.meta.size == other.size
   }
 }
 
