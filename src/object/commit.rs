@@ -6,7 +6,6 @@ use std::io::BufReader;
 use crate::object::Object;
 use crate::prelude::*;
 
-#[derive(Debug)]
 pub struct Commit {
   pub tree:        String,      // sha
   pub parent_shas: Vec<String>, // shas
@@ -22,6 +21,19 @@ pub struct Person {
   pub name:  String,
   pub email: String,
   pub date:  DateTime<FixedOffset>,
+}
+
+impl fmt::Debug for Commit {
+  #[rustfmt::skip]
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    f.debug_struct("Commit")
+      .field("tree", &self.tree)
+      .field("parent_shas", &self.parent_shas)
+      .field("author", &self.author)
+      .field("committer", &self.author)
+      .field("message", &self.message)
+      .finish()
+  }
 }
 
 impl GitObject for Commit {
@@ -174,6 +186,10 @@ impl Commit {
       .unwrap();
 
     &self.message[0..idx]
+  }
+
+  pub fn tree(&self) -> &String {
+    &self.tree
   }
 }
 
