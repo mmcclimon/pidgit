@@ -2,6 +2,7 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fmt;
+use std::fs::Metadata;
 use std::path::PathBuf;
 
 // use crate::object::Blob;
@@ -28,8 +29,15 @@ pub enum TreeItem {
 #[derive(Debug)]
 pub struct PathEntry {
   path: PathBuf,
-  mode: String,
+  mode: Mode,
   sha:  String,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum Mode {
+  Tree,
+  Executable,
+  Normal,
 }
 
 impl fmt::Debug for Tree {
@@ -97,9 +105,10 @@ impl Tree {
     let len = reader.get_ref().len();
 
     while (reader.position() as usize) < len {
-      let mut mode = vec![];
-      reader.read_until(b' ', &mut mode).expect(err);
-      mode.pop();
+      let mut mode_buf = vec![];
+      reader.read_until(b' ', &mut mode_buf).expect(err);
+      mode_buf.pop();
+      let mode = Mode::from(&mode_buf[0..]);
 
       let mut filename = vec![];
       reader.read_until(b'\0', &mut filename).expect(err);
@@ -108,13 +117,11 @@ impl Tree {
       let mut sha = [0u8; sha1::DIGEST_LENGTH];
       reader.read_exact(&mut sha).expect(err);
 
-      let mode_str = format!("{:0>6}", String::from_utf8(mode).expect(err));
-
       let p = OsString::from_vec(filename);
 
       entries.push(PathEntry {
-        mode: mode_str,
-        sha:  hex::encode(sha),
+        mode,
+        sha: hex::encode(sha),
         path: p.into(),
       });
     }
@@ -187,9 +194,7 @@ impl PathEntry {
   pub fn as_entry_bytes(&self) -> Vec<u8> {
     use std::os::unix::ffi::OsStrExt;
 
-    let mut ret = format!("{} ", self.mode.trim_start_matches("0"),)
-      .as_bytes()
-      .to_vec();
+    let mut ret = format!("{} ", self.mode.short()).as_bytes().to_vec();
 
     ret.extend(self.path.file_name().unwrap().as_bytes());
     ret.push(0);
@@ -198,23 +203,14 @@ impl PathEntry {
   }
 
   pub fn from_path(path: &PathBuf) -> Result<Self> {
-    use std::os::unix::fs::PermissionsExt;
-
     let meta = path.metadata()?;
-    let perms = meta.permissions();
-
-    let mode = if perms.mode() & 0o111 != 0 {
-      "100755"
-    } else {
-      "100644"
-    };
-
+    let mode = Mode::from(&meta);
     let sha = util::compute_sha_for_path(path, Some(&meta))?;
 
     Ok(PathEntry {
       path: path.clone(),
-      mode: mode.to_string(),
-      sha:  sha.hexdigest(),
+      mode,
+      sha: sha.hexdigest(),
     })
   }
 
@@ -235,6 +231,10 @@ impl PathEntry {
   // NB this is a string, not a Sha1!
   pub fn sha(&self) -> &str {
     &self.sha
+  }
+
+  pub fn is_dir(&self) -> bool {
+    self.mode == Mode::Tree
   }
 }
 
@@ -269,7 +269,7 @@ impl PartialEq for PathEntry {
 impl From<&IndexEntry> for PathEntry {
   fn from(entry: &IndexEntry) -> Self {
     Self {
-      mode: format!("{:0>6o}", entry.mode()),
+      mode: Mode::from(entry.mode()),
       path: PathBuf::from(entry.name.clone()),
       sha:  entry.sha.clone(),
     }
@@ -288,18 +288,74 @@ impl TreeItem {
     match self {
       TreeItem::Tree(tree) => format!(
         "{} {} {}    {}",
-        "040000",
+        Mode::Tree.long(),
         "tree",
         tree.sha().hexdigest(),
         PathBuf::from(&tree.label).display(),
       ),
       TreeItem::Entry(e) => format!(
         "{} {} {}    {}",
-        e.mode,
+        e.mode.long(),
         "blob",
         e.sha,
         PathBuf::from(e.path.file_name().unwrap()).display(),
       ),
+    }
+  }
+}
+
+impl Mode {
+  pub fn short(&self) -> &'static str {
+    match self {
+      Self::Tree => "40000",
+      Self::Normal => "100644",
+      Self::Executable => "100755",
+    }
+  }
+
+  pub fn long(&self) -> &'static str {
+    match self {
+      Self::Tree => "040000",
+      _ => self.short(),
+    }
+  }
+}
+
+impl From<&Metadata> for Mode {
+  fn from(stat: &Metadata) -> Self {
+    use std::os::unix::fs::PermissionsExt;
+
+    if stat.is_dir() {
+      return Self::Tree;
+    }
+
+    if stat.permissions().mode() & 0o111 != 0 {
+      Self::Executable
+    } else {
+      Self::Normal
+    }
+  }
+}
+
+impl From<&[u8]> for Mode {
+  fn from(bytes: &[u8]) -> Self {
+    match bytes {
+      b"40000" => Self::Tree,
+      b"100644" => Self::Normal,
+      b"100755" => Self::Executable,
+      _ => panic!("unknown mode {:?}", bytes),
+    }
+  }
+}
+
+impl From<u32> for Mode {
+  fn from(mode: u32) -> Self {
+    let mode_str = format!("{:0>6o}", mode);
+    match mode_str.as_str() {
+      "040000" => Self::Tree,
+      "100644" => Self::Normal,
+      "100755" => Self::Executable,
+      _ => panic!("unknown mode {:?}", mode_str),
     }
   }
 }
