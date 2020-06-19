@@ -1,5 +1,5 @@
 use clap::{App, ArgMatches};
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::ffi::OsString;
 use std::fs::Metadata;
 use std::path::PathBuf;
@@ -11,11 +11,16 @@ use crate::prelude::*;
 #[derive(Debug)]
 struct Status;
 
+enum ChangeType {
+  Modified,
+  Deleted,
+}
+
 struct StatusHelper<'c> {
   repo:      &'c Repository,
   index:     &'c mut Index,
   untracked: BTreeSet<OsString>,
-  changed:   BTreeSet<OsString>,
+  changed:   BTreeMap<OsString, ChangeType>,
   stats:     HashMap<OsString, Metadata>,
 }
 
@@ -36,7 +41,7 @@ impl Command for Status {
       repo,
       index: &mut repo.index()?,
       untracked: BTreeSet::new(),
-      changed: BTreeSet::new(),
+      changed: BTreeMap::new(),
       stats: HashMap::new(),
     };
 
@@ -45,8 +50,12 @@ impl Command for Status {
     helper.scan_workspace(workspace.root())?;
     helper.detect_changes();
 
-    for file in helper.changed {
-      ctx.println(format!(" M {}", PathBuf::from(file).display()));
+    for (file, status) in helper.changed {
+      ctx.println(format!(
+        " {} {}",
+        status.short_desc(),
+        PathBuf::from(file).display()
+      ));
     }
 
     for spec in helper.untracked {
@@ -57,6 +66,15 @@ impl Command for Status {
     helper.index.write()?;
 
     Ok(())
+  }
+}
+
+impl ChangeType {
+  fn short_desc(&self) -> &'static str {
+    match self {
+      Self::Modified => "M",
+      Self::Deleted => "D",
+    }
   }
 }
 
@@ -112,13 +130,17 @@ impl StatusHelper<'_> {
     // changed.
     for entry in self.index.entries_mut() {
       let path = &entry.name;
-      let stat = self
-        .stats
-        .get(path)
-        .expect(&format!("no stat for {:?}", path));
+      let stat = self.stats.get(path);
+
+      if stat.is_none() {
+        self.changed.insert(path.clone(), ChangeType::Deleted);
+        continue;
+      }
+
+      let stat = stat.unwrap();
 
       if !entry.matches_stat(stat) {
-        self.changed.insert(path.clone());
+        self.changed.insert(path.clone(), ChangeType::Modified);
         continue;
       }
 
@@ -139,7 +161,7 @@ impl StatusHelper<'_> {
         entry.update_meta(stat);
         continue;
       } else {
-        self.changed.insert(path.clone());
+        self.changed.insert(path.clone(), ChangeType::Modified);
       }
     }
   }
@@ -249,5 +271,17 @@ mod tests {
 
     let stdout = tr.run_pidgit(vec!["status"]).unwrap();
     assert_status(stdout, " M file.txt");
+  }
+
+  #[test]
+  fn deleted_files() {
+    let tr = new_empty_repo();
+    tr.write_file("file.txt", "meh\n");
+    tr.commit_all();
+
+    tr.rm_file("file.txt");
+
+    let stdout = tr.run_pidgit(vec!["status"]).unwrap();
+    assert_status(stdout, " D file.txt");
   }
 }
