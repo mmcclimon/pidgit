@@ -14,7 +14,6 @@ use crate::Lockfile;
 const INDEX_VERSION: u32 = 2;
 const MAX_PATH_SIZE: usize = 0xfff;
 
-#[derive(Debug)]
 pub struct Index {
   version:  u32,
   changed:  bool,
@@ -43,6 +42,18 @@ pub struct EntryMeta {
   uid:        u32,
   gid:        u32,
   size:       u32,
+}
+
+impl fmt::Debug for Index {
+  #[rustfmt::skip]
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    f.debug_struct("Index")
+      .field("version", &self.version)
+      .field("changed", &self.changed)
+      .field("lockfile", &self.lockfile.path())
+      .field("entries", &self.entries)
+      .finish()
+  }
 }
 
 impl fmt::Debug for IndexEntry {
