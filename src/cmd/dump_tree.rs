@@ -45,7 +45,7 @@ fn print_tree(repo: &Repository, sha: &str, prefix: &PathBuf) -> Result<()> {
   for (path, entry) in tree.entries() {
     if let TreeItem::Entry(e) = entry {
       if e.is_tree() {
-        print_tree(repo, e.sha(), &path)?;
+        print_tree(repo, e.sha(), &prefix.join(path))?;
       } else {
         println!(
           "{} {} {}",

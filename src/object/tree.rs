@@ -44,11 +44,7 @@ pub enum Mode {
 impl fmt::Debug for Tree {
   #[rustfmt::skip]
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    let e = self
-      .ordered_keys
-      .iter()
-      .map(|k| self.entries.get(k).unwrap())
-      .collect::<Vec<_>>();
+    let e = self.entries().map(|(_, e)| e).collect::<Vec<_>>();
 
     f.debug_struct("Tree")
       .field("root", &self.label)
@@ -60,9 +56,8 @@ impl fmt::Debug for Tree {
 impl GitObject for Tree {
   fn raw_content(&self) -> Vec<u8> {
     self
-      .ordered_keys
-      .iter()
-      .flat_map(|k| self.entries.get(k).unwrap().as_entry_bytes())
+      .entries()
+      .flat_map(|(_, e)| e.as_entry_bytes())
       .collect()
   }
 
@@ -72,9 +67,8 @@ impl GitObject for Tree {
 
   fn pretty(&self) -> Vec<u8> {
     self
-      .ordered_keys
-      .iter()
-      .map(|key| self.entries.get(key).unwrap().pretty())
+      .entries()
+      .map(|(_, e)| e.pretty())
       .collect::<Vec<_>>()
       .join("\n")
       .as_bytes()
@@ -190,12 +184,29 @@ impl Tree {
     ret
   }
 
-  pub fn entries(&self) -> Vec<(PathBuf, TreeItem)> {
-    self
-      .ordered_keys
-      .iter()
-      .map(|k| (k.clone(), self.entries.get(k).unwrap().clone()))
-      .collect()
+  pub fn entries(&self) -> EntryIterator {
+    EntryIterator {
+      tree: &self,
+      idx:  0,
+    }
+  }
+}
+
+pub struct EntryIterator<'t> {
+  tree: &'t Tree,
+  idx:  usize,
+}
+
+impl<'t> Iterator for EntryIterator<'t> {
+  type Item = (&'t PathBuf, &'t TreeItem);
+  fn next(&mut self) -> Option<Self::Item> {
+    if self.idx >= self.tree.ordered_keys.len() {
+      return None;
+    }
+
+    let key = &self.tree.ordered_keys[self.idx];
+    self.idx += 1;
+    Some((key, self.tree.entries.get(key).unwrap()))
   }
 }
 
