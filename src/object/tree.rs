@@ -383,3 +383,16 @@ impl From<u32> for Mode {
     }
   }
 }
+
+impl PartialEq<u32> for Mode {
+  fn eq(&self, other: &u32) -> bool {
+    self == &Self::from(*other)
+  }
+}
+
+// this feels wrong to me
+impl PartialEq<u32> for &Mode {
+  fn eq(&self, other: &u32) -> bool {
+    self == &&Mode::from(*other)
+  }
+}

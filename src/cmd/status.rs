@@ -13,7 +13,6 @@ use crate::prelude::*;
 struct Status;
 
 #[derive(Debug, Eq, PartialEq, Hash)]
-#[allow(unused)]
 enum ChangeType {
   WorkspaceModified,
   WorkspaceDeleted,
@@ -83,6 +82,8 @@ impl Command for Status {
 fn status_for(flags: &HashSet<ChangeType>) -> String {
   let left = match flags {
     _ if flags.contains(&ChangeType::IndexAdded) => "A",
+    _ if flags.contains(&ChangeType::IndexModified) => "M",
+    _ if flags.contains(&ChangeType::IndexDeleted) => "D",
     _ => " ",
   };
 
@@ -227,6 +228,21 @@ impl StatusHelper<'_> {
 
       if !self.head.contains_key(path) {
         record_change(path, ChangeType::IndexAdded);
+        continue;
+      }
+
+      let have = self.head.get(path).unwrap();
+
+      if have.mode() != entry.mode() || have.sha() != entry.sha {
+        record_change(path, ChangeType::IndexModified);
+        continue;
+      }
+    }
+
+    // check for files that exist in HEAD but aren't in the index
+    for key in self.head.keys() {
+      if !self.index.is_tracked_file(key) {
+        record_change(key, ChangeType::IndexDeleted);
       }
     }
 
@@ -383,5 +399,51 @@ mod tests {
 
     let stdout = tr.run_pidgit(vec!["status"]).unwrap();
     assert_status(stdout, "A  d/e/5.txt");
+  }
+
+  #[test]
+  fn modified_mode() {
+    let tr = new_with_commit();
+
+    tr.chmod("1.txt", 0o755);
+    tr.run_pidgit(vec!["add", "."]).unwrap();
+
+    let stdout = tr.run_pidgit(vec!["status"]).unwrap();
+    assert_status(stdout, "M  1.txt");
+  }
+
+  #[test]
+  fn modified_content() {
+    let tr = new_with_commit();
+
+    tr.write_file("a/b/3.txt", "tre\n");
+    tr.run_pidgit(vec!["add", "."]).unwrap();
+
+    let stdout = tr.run_pidgit(vec!["status"]).unwrap();
+    assert_status(stdout, "M  a/b/3.txt");
+  }
+
+  #[test]
+  fn deleted_file_from_index() {
+    let tr = new_with_commit();
+
+    tr.rm_file("a/b/3.txt");
+    tr.rm_file(".pidgit/index");
+    tr.run_pidgit(vec!["add", "."]).expect("bad add!");
+
+    let stdout = tr.run_pidgit(vec!["status"]).unwrap();
+    assert_status(stdout, "D  a/b/3.txt");
+  }
+
+  #[test]
+  fn deleted_dir_from_index() {
+    let tr = new_with_commit();
+
+    tr.rm_rf("a");
+    tr.rm_file(".pidgit/index");
+    tr.run_pidgit(vec!["add", "."]).expect("bad add!");
+
+    let stdout = tr.run_pidgit(vec!["status"]).unwrap();
+    assert_status(stdout, "D  a/2.txt\nD  a/b/3.txt");
   }
 }

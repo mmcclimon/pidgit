@@ -103,6 +103,10 @@ impl Index {
   // https://github.com/git/git/blob/master/Documentation/technical/index-format.txt
   // Here, I am ignoring extensions entirely!
   pub fn load(&mut self) -> Result<()> {
+    if !self.lockfile.path().exists() {
+      return Ok(()); // we're already an empty index!
+    }
+
     if self.lockfile.is_locked() {
       return index_error("index file is locked; cannot read");
     }
@@ -364,7 +368,11 @@ impl Index {
   }
 
   pub fn is_tracked(&self, key: &OsStr) -> bool {
-    self.entries.contains_key(key) || self.parents.contains_key(key)
+    self.is_tracked_file(key) || self.parents.contains_key(key)
+  }
+
+  pub fn is_tracked_file(&self, key: &OsStr) -> bool {
+    self.entries.contains_key(key)
   }
 }
 

@@ -65,6 +65,12 @@ impl TestRepo {
     assert!(!child.path().exists())
   }
 
+  pub fn rm_rf(&self, path: &str) {
+    let child = self.dir.child(path);
+    std::fs::remove_dir_all(&child.path()).expect("could not remove dir");
+    assert!(!child.path().exists())
+  }
+
   pub fn chmod(&self, pathstr: &str, mode: u32) {
     use std::os::unix::fs::PermissionsExt;
     let child = self.dir.child(pathstr);
