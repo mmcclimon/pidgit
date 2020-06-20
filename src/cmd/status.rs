@@ -1,5 +1,5 @@
 use clap::{App, ArgMatches};
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::ffi::OsString;
 use std::fs::Metadata;
 use std::path::PathBuf;
@@ -14,21 +14,20 @@ struct Status;
 
 #[derive(Debug, Eq, PartialEq, Hash)]
 enum ChangeType {
-  WorkspaceModified,
-  WorkspaceDeleted,
-  IndexModified,
-  IndexDeleted,
-  IndexAdded,
+  Modified,
+  Deleted,
+  Added,
 }
 
 #[derive(Debug)]
 struct StatusHelper<'c> {
-  repo:      &'c Repository,
-  index:     &'c mut Index,
-  untracked: BTreeSet<OsString>,
-  changed:   BTreeMap<OsString, HashSet<ChangeType>>,
-  stats:     HashMap<OsString, Metadata>,
-  head:      HashMap<OsString, PathEntry>,
+  repo:           &'c Repository,
+  index:          &'c mut Index,
+  stats:          HashMap<OsString, Metadata>,
+  untracked:      BTreeSet<OsString>,
+  index_diff:     BTreeMap<OsString, ChangeType>,
+  workspace_diff: BTreeMap<OsString, ChangeType>,
+  head_diff:      HashMap<OsString, PathEntry>,
 }
 
 pub fn new() -> Box<dyn Command> {
@@ -49,9 +48,10 @@ impl Command for Status {
       repo,
       index: &mut repo.index()?,
       untracked: BTreeSet::new(),
-      changed: BTreeMap::new(),
       stats: HashMap::new(),
-      head: HashMap::new(),
+      head_diff: HashMap::new(),
+      index_diff: BTreeMap::new(),
+      workspace_diff: BTreeMap::new(),
     };
 
     let workspace = repo.workspace();
@@ -60,11 +60,17 @@ impl Command for Status {
     helper.load_head()?;
     helper.detect_changes();
 
-    for (file, status) in helper.changed {
+    use std::iter::FromIterator;
+
+    let paths = BTreeSet::from_iter(
+      helper.index_diff.keys().chain(helper.workspace_diff.keys()),
+    );
+
+    for path in paths {
       ctx.println(format!(
         "{} {}",
-        status_for(&status),
-        PathBuf::from(file).display()
+        helper.status_for(&path),
+        PathBuf::from(path).display()
       ));
     }
 
@@ -79,21 +85,14 @@ impl Command for Status {
   }
 }
 
-fn status_for(flags: &HashSet<ChangeType>) -> String {
-  let left = match flags {
-    _ if flags.contains(&ChangeType::IndexAdded) => "A",
-    _ if flags.contains(&ChangeType::IndexModified) => "M",
-    _ if flags.contains(&ChangeType::IndexDeleted) => "D",
-    _ => " ",
-  };
-
-  let right = match flags {
-    _ if flags.contains(&ChangeType::WorkspaceDeleted) => "D",
-    _ if flags.contains(&ChangeType::WorkspaceModified) => "M",
-    _ => " ",
-  };
-
-  format!("{}{}", left, right)
+impl ChangeType {
+  fn display(&self) -> char {
+    match self {
+      Self::Modified => 'M',
+      Self::Deleted => 'D',
+      Self::Added => 'A',
+    }
+  }
 }
 
 impl StatusHelper<'_> {
@@ -164,7 +163,7 @@ impl StatusHelper<'_> {
         if e.is_tree() {
           self.read_tree(e.sha(), &fullpath)?;
         } else {
-          self.head.insert(fullpath.into(), e.clone());
+          self.head_diff.insert(fullpath.into(), e.clone());
         }
       }
     }
@@ -173,16 +172,11 @@ impl StatusHelper<'_> {
   }
 
   fn detect_changes(&mut self) {
-    let mut changed = BTreeMap::new();
+    self.check_index();
+    self.check_head();
+  }
 
-    let mut record_change = |path: &OsString, kind: ChangeType| {
-      if !changed.contains_key(path) {
-        changed.insert(path.clone(), HashSet::new());
-      }
-
-      changed.get_mut(path).unwrap().insert(kind);
-    };
-
+  fn check_index(&mut self) {
     // Check the working tree: for every file in the index, if our stat is
     // different than it, it's changed.
     for entry in self.index.entries_mut() {
@@ -190,14 +184,18 @@ impl StatusHelper<'_> {
       let stat = self.stats.get(path);
 
       if stat.is_none() {
-        record_change(path, ChangeType::WorkspaceDeleted);
+        self
+          .workspace_diff
+          .insert(path.clone(), ChangeType::Deleted);
         continue;
       }
 
       let stat = stat.unwrap();
 
       if !entry.matches_stat(stat) {
-        record_change(path, ChangeType::WorkspaceModified);
+        self
+          .workspace_diff
+          .insert(path.clone(), ChangeType::Modified);
         continue;
       }
 
@@ -218,35 +216,51 @@ impl StatusHelper<'_> {
         entry.update_meta(stat);
         continue;
       } else {
-        record_change(path, ChangeType::WorkspaceModified);
+        self
+          .workspace_diff
+          .insert(path.clone(), ChangeType::Modified);
       }
     }
+  }
 
+  fn check_head(&mut self) {
     // now, check against the head
     for entry in self.index.entries() {
       let path = &entry.name;
 
-      if !self.head.contains_key(path) {
-        record_change(path, ChangeType::IndexAdded);
+      if !self.head_diff.contains_key(path) {
+        self.index_diff.insert(path.clone(), ChangeType::Added);
         continue;
       }
 
-      let have = self.head.get(path).unwrap();
+      let have = self.head_diff.get(path).unwrap();
 
       if have.mode() != entry.mode() || have.sha() != entry.sha {
-        record_change(path, ChangeType::IndexModified);
+        self.index_diff.insert(path.clone(), ChangeType::Modified);
         continue;
       }
     }
 
     // check for files that exist in HEAD but aren't in the index
-    for key in self.head.keys() {
+    for key in self.head_diff.keys() {
       if !self.index.is_tracked_file(key) {
-        record_change(key, ChangeType::IndexDeleted);
+        self.index_diff.insert(key.clone(), ChangeType::Deleted);
       }
     }
+  }
 
-    self.changed = changed;
+  fn status_for(&self, path: &OsString) -> String {
+    let left = match self.index_diff.get(path) {
+      Some(ct) => ct.display(),
+      None => ' ',
+    };
+
+    let right = match self.workspace_diff.get(path) {
+      Some(ct) => ct.display(),
+      _ => ' ',
+    };
+
+    format!("{}{}", left, right)
   }
 }
 
