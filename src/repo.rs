@@ -320,6 +320,10 @@ impl Repository {
     tree.traverse(&|t| self.write_object(t))
   }
 
+  pub fn head(&self) -> Option<Commit> {
+    self.resolve_ref("HEAD").and_then(|c| c.as_commit()).ok()
+  }
+
   pub fn update_head(&self, new_sha: &Sha1) -> Result<()> {
     // we must read the content of .git/HEAD. If that's a gitref, we find the
     // open that other file instead. If it's not a gitref, it must be a sha

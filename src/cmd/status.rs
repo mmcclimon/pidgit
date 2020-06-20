@@ -1,27 +1,35 @@
 use clap::{App, ArgMatches};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ffi::OsString;
 use std::fs::Metadata;
 use std::path::PathBuf;
 
 use crate::cmd::Context;
 use crate::index::Index;
+use crate::object::{PathEntry, TreeItem};
 use crate::prelude::*;
 
 #[derive(Debug)]
 struct Status;
 
+#[derive(Debug, Eq, PartialEq, Hash)]
+#[allow(unused)]
 enum ChangeType {
-  Modified,
-  Deleted,
+  WorkspaceModified,
+  WorkspaceDeleted,
+  IndexModified,
+  IndexDeleted,
+  IndexAdded,
 }
 
+#[derive(Debug)]
 struct StatusHelper<'c> {
   repo:      &'c Repository,
   index:     &'c mut Index,
   untracked: BTreeSet<OsString>,
-  changed:   BTreeMap<OsString, ChangeType>,
+  changed:   BTreeMap<OsString, HashSet<ChangeType>>,
   stats:     HashMap<OsString, Metadata>,
+  head:      HashMap<OsString, PathEntry>,
 }
 
 pub fn new() -> Box<dyn Command> {
@@ -37,23 +45,26 @@ impl Command for Status {
   fn run(&self, _matches: &ArgMatches, ctx: &Context) -> Result<()> {
     let repo = ctx.repo()?;
 
+    // we accumulate state in the helper, then print it all out.
     let mut helper = StatusHelper {
       repo,
       index: &mut repo.index()?,
       untracked: BTreeSet::new(),
       changed: BTreeMap::new(),
       stats: HashMap::new(),
+      head: HashMap::new(),
     };
 
     let workspace = repo.workspace();
 
     helper.scan_workspace(workspace.root())?;
+    helper.load_head()?;
     helper.detect_changes();
 
     for (file, status) in helper.changed {
       ctx.println(format!(
-        " {} {}",
-        status.short_desc(),
+        "{} {}",
+        status_for(&status),
         PathBuf::from(file).display()
       ));
     }
@@ -69,13 +80,19 @@ impl Command for Status {
   }
 }
 
-impl ChangeType {
-  fn short_desc(&self) -> &'static str {
-    match self {
-      Self::Modified => "M",
-      Self::Deleted => "D",
-    }
-  }
+fn status_for(flags: &HashSet<ChangeType>) -> String {
+  let left = match flags {
+    _ if flags.contains(&ChangeType::IndexAdded) => "A",
+    _ => " ",
+  };
+
+  let right = match flags {
+    _ if flags.contains(&ChangeType::WorkspaceDeleted) => "D",
+    _ if flags.contains(&ChangeType::WorkspaceModified) => "M",
+    _ => " ",
+  };
+
+  format!("{}{}", left, right)
 }
 
 impl StatusHelper<'_> {
@@ -125,22 +142,61 @@ impl StatusHelper<'_> {
       .any(|(path, stat)| self.is_trackable(path, stat))
   }
 
+  fn load_head(&mut self) -> Result<()> {
+    let head = self.repo.head();
+    if head.is_none() {
+      return Ok(());
+    }
+
+    let tree = head.unwrap().tree().to_string();
+    self.read_tree(&tree, &PathBuf::from(""))?;
+
+    Ok(())
+  }
+
+  fn read_tree(&mut self, sha: &str, prefix: &PathBuf) -> Result<()> {
+    let tree = self.repo.resolve_object(sha)?.as_tree()?;
+
+    for (path, entry) in tree.entries() {
+      if let TreeItem::Entry(e) = entry {
+        let fullpath = prefix.join(path);
+        if e.is_tree() {
+          self.read_tree(e.sha(), &fullpath)?;
+        } else {
+          self.head.insert(fullpath.into(), e.clone());
+        }
+      }
+    }
+
+    Ok(())
+  }
+
   fn detect_changes(&mut self) {
-    // For every file in the index, if our stat is different than it, it's
-    // changed.
+    let mut changed = BTreeMap::new();
+
+    let mut record_change = |path: &OsString, kind: ChangeType| {
+      if !changed.contains_key(path) {
+        changed.insert(path.clone(), HashSet::new());
+      }
+
+      changed.get_mut(path).unwrap().insert(kind);
+    };
+
+    // Check the working tree: for every file in the index, if our stat is
+    // different than it, it's changed.
     for entry in self.index.entries_mut() {
       let path = &entry.name;
       let stat = self.stats.get(path);
 
       if stat.is_none() {
-        self.changed.insert(path.clone(), ChangeType::Deleted);
+        record_change(path, ChangeType::WorkspaceDeleted);
         continue;
       }
 
       let stat = stat.unwrap();
 
       if !entry.matches_stat(stat) {
-        self.changed.insert(path.clone(), ChangeType::Modified);
+        record_change(path, ChangeType::WorkspaceModified);
         continue;
       }
 
@@ -161,9 +217,20 @@ impl StatusHelper<'_> {
         entry.update_meta(stat);
         continue;
       } else {
-        self.changed.insert(path.clone(), ChangeType::Modified);
+        record_change(path, ChangeType::WorkspaceModified);
       }
     }
+
+    // now, check against the head
+    for entry in self.index.entries() {
+      let path = &entry.name;
+
+      if !self.head.contains_key(path) {
+        record_change(path, ChangeType::IndexAdded);
+      }
+    }
+
+    self.changed = changed;
   }
 }
 
@@ -283,5 +350,38 @@ mod tests {
 
     let stdout = tr.run_pidgit(vec!["status"]).unwrap();
     assert_status(stdout, " D file.txt");
+  }
+
+  // tests below deal with diffing HEAD and the index, so we'll generate a
+  // not-empty repo for testing
+  fn new_with_commit() -> TestRepo {
+    let tr = new_empty_repo();
+    tr.write_file("1.txt", "one\n");
+    tr.write_file("a/2.txt", "two\n");
+    tr.write_file("a/b/3.txt", "three\n");
+    tr.commit_all();
+    tr
+  }
+
+  #[test]
+  fn added_file_in_tracked_dir() {
+    let tr = new_with_commit();
+
+    tr.write_file("a/4.txt", "four\n");
+    tr.run_pidgit(vec!["add", "."]).unwrap();
+
+    let stdout = tr.run_pidgit(vec!["status"]).unwrap();
+    assert_status(stdout, "A  a/4.txt");
+  }
+
+  #[test]
+  fn added_file_in_untracked_dir() {
+    let tr = new_with_commit();
+
+    tr.write_file("d/e/5.txt", "five\n");
+    tr.run_pidgit(vec!["add", "."]).unwrap();
+
+    let stdout = tr.run_pidgit(vec!["status"]).unwrap();
+    assert_status(stdout, "A  d/e/5.txt");
   }
 }
