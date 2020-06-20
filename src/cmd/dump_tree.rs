@@ -1,4 +1,4 @@
-use clap::{App, ArgMatches};
+use clap::{App, Arg, ArgMatches};
 use std::path::PathBuf;
 
 use crate::cmd::Context;
@@ -14,12 +14,20 @@ pub fn new() -> Box<dyn Command> {
 
 impl Command for DumpTree {
   fn app(&self) -> App<'static, 'static> {
-    App::new("dump-tree").about("dump a tree (for debugging)")
+    App::new("dump-tree")
+      .about("dump a tree (for debugging)")
+      .arg(
+        Arg::with_name("commit") // really, should implement tree-ish
+          .default_value("HEAD")
+          .help("commit to dump"),
+      )
   }
 
-  fn run(&self, _matches: &ArgMatches, ctx: &Context) -> Result<()> {
+  fn run(&self, matches: &ArgMatches, ctx: &Context) -> Result<()> {
     let repo = ctx.repo()?;
-    let head = repo.resolve_object("head")?;
+
+    let to_find = matches.value_of("commit").unwrap();
+    let head = repo.resolve_object(to_find)?;
 
     let commit = head.as_commit()?;
 
