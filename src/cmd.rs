@@ -6,6 +6,7 @@ mod add;
 mod cat_file;
 mod commit;
 mod dump_index;
+mod dump_tree;
 mod hash_object;
 mod init;
 mod log;
@@ -33,6 +34,7 @@ impl CommandSet {
     commands.insert("cat-file", cat_file::new());
     commands.insert("commit", commit::new());
     commands.insert("dump-index", dump_index::new());
+    commands.insert("dump-tree", dump_tree::new());
     commands.insert("hash-object", hash_object::new());
     commands.insert("init", init::new());
     commands.insert("log", log::new());

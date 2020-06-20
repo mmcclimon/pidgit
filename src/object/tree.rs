@@ -9,6 +9,7 @@ use std::path::PathBuf;
 use crate::index::{Index, IndexEntry};
 use crate::prelude::*;
 
+#[derive(Clone)]
 pub struct Tree {
   entries:      HashMap<PathBuf, TreeItem>,
   label:        OsString,
@@ -18,7 +19,7 @@ pub struct Tree {
 // meh, these names. A tree *item* is an element of a tree, which is either
 // another tree or a path. A tree
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TreeItem {
   Tree(Tree),
   Entry(PathEntry),
@@ -26,15 +27,15 @@ pub enum TreeItem {
 
 // I would like these to be &str, which I think could work, but I need to work
 // out the lifetimes.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PathEntry {
   path: PathBuf,
   mode: Mode,
   sha:  String,
 }
 
-#[derive(Debug, PartialEq, Eq)]
-enum Mode {
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum Mode {
   Tree,
   Executable,
   Normal,
@@ -188,6 +189,14 @@ impl Tree {
     ret.extend(self.sha().digest().bytes().iter());
     ret
   }
+
+  pub fn entries(&self) -> Vec<(PathBuf, TreeItem)> {
+    self
+      .ordered_keys
+      .iter()
+      .map(|k| (k.clone(), self.entries.get(k).unwrap().clone()))
+      .collect()
+  }
 }
 
 impl PathEntry {
@@ -233,7 +242,11 @@ impl PathEntry {
     &self.sha
   }
 
-  pub fn is_dir(&self) -> bool {
+  pub fn mode(&self) -> &Mode {
+    &self.mode
+  }
+
+  pub fn is_tree(&self) -> bool {
     self.mode == Mode::Tree
   }
 }
