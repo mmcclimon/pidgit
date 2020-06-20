@@ -112,4 +112,32 @@ impl Object {
       Object::Tree(tree) => tree,
     }
   }
+
+  pub fn as_blob(self) -> Result<Blob> {
+    match self {
+      Object::Blob(blob) => Ok(blob),
+      _ => Err(PidgitError::InvalidObject("blob")),
+    }
+  }
+
+  pub fn as_commit(self) -> Result<Commit> {
+    match self {
+      Object::Commit(commit) => Ok(commit),
+      _ => Err(PidgitError::InvalidObject("commit")),
+    }
+  }
+
+  pub fn as_tag(self) -> Result<Tag> {
+    match self {
+      Object::Tag(tag) => Ok(tag),
+      _ => Err(PidgitError::InvalidObject("tag")),
+    }
+  }
+
+  pub fn as_tree(self) -> Result<Tree> {
+    match self {
+      Object::Tree(tree) => Ok(tree),
+      _ => Err(PidgitError::InvalidObject("tree")),
+    }
+  }
 }

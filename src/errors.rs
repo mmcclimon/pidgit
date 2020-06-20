@@ -15,6 +15,7 @@ pub enum PidgitError {
   Internal(Box<dyn std::error::Error>),
   ObjectNotFound(String),
   RefNotFound(String),
+  InvalidObject(&'static str), // wanted type
   PathspecNotFound(OsString),
   Index(String),
   Lock(PathBuf, IoError),
@@ -35,6 +36,7 @@ impl fmt::Display for PidgitError {
       PE::Internal(err) => write!(f, "weird error: {}", err),
       PE::ObjectNotFound(sha) => write!(f, "object not found: {}", sha),
       PE::RefNotFound(refname) => write!(f, "ref not found: {}", refname),
+      PE::InvalidObject(want) => write!(f, "invalid object type: not a {}", want),
       PE::Index(err) => write!(f, "could not parse index file: {}", err),
       PE::PathspecNotFound(spec) => {
         write!(f, "pathspec {:?} did not match any files", spec)

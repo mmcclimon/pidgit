@@ -2,7 +2,7 @@ use clap::{App, ArgMatches};
 use std::path::PathBuf;
 
 use crate::cmd::Context;
-use crate::object::{Object, TreeItem};
+use crate::object::TreeItem;
 use crate::prelude::*;
 
 #[derive(Debug)]
@@ -21,11 +21,7 @@ impl Command for DumpTree {
     let repo = ctx.repo()?;
     let head = repo.resolve_object("head")?;
 
-    let commit = if let Object::Commit(inner) = head {
-      inner
-    } else {
-      return Err(PidgitError::Generic("head is not a commit?".into()));
-    };
+    let commit = head.as_commit()?;
 
     let tree = repo.resolve_object(commit.tree())?.into_inner();
 
@@ -36,11 +32,7 @@ impl Command for DumpTree {
 }
 
 fn print_tree(repo: &Repository, sha: &str, prefix: &PathBuf) -> Result<()> {
-  let tree = if let Object::Tree(inner) = repo.resolve_object(sha)? {
-    inner
-  } else {
-    return Err(PidgitError::Generic("sha is not a commit?".into()));
-  };
+  let tree = repo.resolve_object(sha)?.as_tree()?;
 
   for (path, entry) in tree.entries() {
     if let TreeItem::Entry(e) = entry {
