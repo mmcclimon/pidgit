@@ -42,10 +42,14 @@ impl Command for Status {
       .about("show the working tree status")
       .arg(
         Arg::with_name("short")
-          .alias("porcelain")
           .long("short")
           .short("s")
-          .help("short output"),
+          .help("show status concisely"),
+      )
+      .arg(
+        Arg::with_name("porcelain")
+          .long("porcelain")
+          .help("machine-readable output"),
       )
   }
 
@@ -71,7 +75,9 @@ impl Command for Status {
 
     // print!
     if matches.is_present("short") {
-      helper.print_short(ctx);
+      helper.print_short(ctx, true);
+    } else if matches.is_present("porcelain") {
+      helper.print_short(ctx, false);
     } else {
       helper.print_full(ctx);
     }
@@ -83,12 +89,12 @@ impl Command for Status {
 }
 
 impl ChangeType {
-  fn display(&self) -> char {
+  fn display(&self) -> &'static str {
     match self {
-      Self::Modified => 'M',
-      Self::Deleted => 'D',
-      Self::Added => 'A',
-      Self::Untracked => '?',
+      Self::Modified => "M",
+      Self::Deleted => "D",
+      Self::Added => "A",
+      Self::Untracked => "?",
     }
   }
 
@@ -256,21 +262,29 @@ impl StatusHelper<'_> {
     }
   }
 
-  fn status_for(&self, path: &OsString) -> String {
+  fn status_for(&self, path: &OsString, use_color: bool) -> String {
     let left = match self.index_diff.get(path) {
       Some(ct) => ct.display(),
-      None => ' ',
+      None => " ",
     };
 
     let right = match self.workspace_diff.get(path) {
       Some(ct) => ct.display(),
-      _ => ' ',
+      _ => " ",
     };
 
-    format!("{}{}", left, right)
+    if use_color {
+      format!(
+        "{}{}",
+        util::colored(left, Color::Green),
+        util::colored(right, Color::Red)
+      )
+    } else {
+      format!("{}{}", left, right)
+    }
   }
 
-  fn print_short(&self, ctx: &Context) {
+  fn print_short(&self, ctx: &Context, use_color: bool) {
     use std::iter::FromIterator;
 
     let paths = BTreeSet::from_iter(
@@ -280,7 +294,7 @@ impl StatusHelper<'_> {
     for path in paths {
       ctx.println(format!(
         "{} {}",
-        self.status_for(&path),
+        self.status_for(&path, use_color),
         PathBuf::from(path).display()
       ));
     }
