@@ -1,3 +1,4 @@
+use ansi_term::{ANSIGenericString, Color, Style};
 use sha1::Sha1;
 use std::fs::Metadata;
 use std::path::{Path, PathBuf};
@@ -72,4 +73,14 @@ pub fn compute_sha_for_path(
   }
 
   Ok(sha)
+}
+
+pub fn colored(s: &str, color: Color) -> ANSIGenericString<str> {
+  use atty::Stream;
+
+  if !atty::is(Stream::Stdout) {
+    Style::new().paint(s)
+  } else {
+    color.paint(s)
+  }
 }

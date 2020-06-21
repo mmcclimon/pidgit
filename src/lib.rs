@@ -20,6 +20,7 @@ pub mod prelude {
   pub use crate::object::GitObject;
   pub use crate::repo::Repository;
   pub use crate::util;
+  pub use ansi_term::Color;
 }
 
 // The actual app implementation. Basic usage:

@@ -290,11 +290,20 @@ impl StatusHelper<'_> {
     }
   }
 
-  #[rustfmt::skip]
   fn print_full(&self, ctx: &Context) {
-    self.print_changes(ctx, "Changes to be committed", &self.index_diff);
-    self.print_changes(ctx, "Changes not staged for commit", &self.workspace_diff);
-    self.print_changes(ctx, "Untracked files", &self.untracked);
+    self.print_changes(
+      ctx,
+      "Changes to be committed",
+      &self.index_diff,
+      Color::Green,
+    );
+    self.print_changes(
+      ctx,
+      "Changes not staged for commit",
+      &self.workspace_diff,
+      Color::Red,
+    );
+    self.print_changes(ctx, "Untracked files", &self.untracked, Color::Red);
     self.print_commit_status(ctx);
   }
 
@@ -303,6 +312,7 @@ impl StatusHelper<'_> {
     ctx: &Context,
     prefix: &str,
     changeset: &BTreeMap<OsString, ChangeType>,
+    color: Color,
   ) {
     if changeset.len() == 0 {
       return;
@@ -317,7 +327,10 @@ impl StatusHelper<'_> {
         format!("{:<12}", kind.long_display().to_string() + ":")
       };
 
-      ctx.println(format!("\t{}{}", status, PathBuf::from(path).display()));
+      ctx.println_color(
+        format!("\t{}{}", status, PathBuf::from(path).display()),
+        color,
+      );
     }
 
     ctx.println("".to_string());
