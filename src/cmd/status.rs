@@ -1,4 +1,4 @@
-use clap::{App, ArgMatches};
+use clap::{App, Arg, ArgMatches};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::ffi::OsString;
 use std::fs::Metadata;
@@ -17,6 +17,7 @@ enum ChangeType {
   Modified,
   Deleted,
   Added,
+  Untracked,
 }
 
 #[derive(Debug)]
@@ -24,7 +25,7 @@ struct StatusHelper<'c> {
   repo:           &'c Repository,
   index:          &'c mut Index,
   stats:          HashMap<OsString, Metadata>,
-  untracked:      BTreeSet<OsString>,
+  untracked:      BTreeMap<OsString, ChangeType>,
   index_diff:     BTreeMap<OsString, ChangeType>,
   workspace_diff: BTreeMap<OsString, ChangeType>,
   head_diff:      HashMap<OsString, PathEntry>,
@@ -37,17 +38,25 @@ pub fn new() -> Box<dyn Command> {
 impl Command for Status {
   fn app(&self) -> App<'static, 'static> {
     // this doesn't have all the smarts git does, for now
-    App::new("status").about("show the working tree status")
+    App::new("status")
+      .about("show the working tree status")
+      .arg(
+        Arg::with_name("short")
+          .alias("porcelain")
+          .long("short")
+          .short("s")
+          .help("short output"),
+      )
   }
 
-  fn run(&self, _matches: &ArgMatches, ctx: &Context) -> Result<()> {
+  fn run(&self, matches: &ArgMatches, ctx: &Context) -> Result<()> {
     let repo = ctx.repo()?;
 
     // we accumulate state in the helper, then print it all out.
     let mut helper = StatusHelper {
       repo,
       index: &mut repo.index()?,
-      untracked: BTreeSet::new(),
+      untracked: BTreeMap::new(),
       stats: HashMap::new(),
       head_diff: HashMap::new(),
       index_diff: BTreeMap::new(),
@@ -60,24 +69,12 @@ impl Command for Status {
     helper.load_head()?;
     helper.detect_changes();
 
-    use std::iter::FromIterator;
-
-    let paths = BTreeSet::from_iter(
-      helper.index_diff.keys().chain(helper.workspace_diff.keys()),
-    );
-
-    for path in paths {
-      ctx.println(format!(
-        "{} {}",
-        helper.status_for(&path),
-        PathBuf::from(path).display()
-      ));
+    // print!
+    if matches.is_present("short") {
+      helper.print_short(ctx);
+    } else {
+      helper.print_full(ctx);
     }
-
-    for spec in helper.untracked {
-      ctx.println(format!("?? {}", PathBuf::from(spec).display()));
-    }
-
     // update the index, in case any of the stats have changed
     helper.index.write()?;
 
@@ -91,6 +88,16 @@ impl ChangeType {
       Self::Modified => 'M',
       Self::Deleted => 'D',
       Self::Added => 'A',
+      Self::Untracked => '?',
+    }
+  }
+
+  fn long_display(&self) -> &'static str {
+    match self {
+      Self::Modified => "modified",
+      Self::Deleted => "deleted",
+      Self::Added => "new file",
+      Self::Untracked => "untracked file",
     }
   }
 }
@@ -117,7 +124,7 @@ impl StatusHelper<'_> {
         let mut name = path_str.clone();
         name.push(suffix);
 
-        self.untracked.insert(name);
+        self.untracked.insert(name, ChangeType::Untracked);
       }
     }
 
@@ -262,6 +269,73 @@ impl StatusHelper<'_> {
 
     format!("{}{}", left, right)
   }
+
+  fn print_short(&self, ctx: &Context) {
+    use std::iter::FromIterator;
+
+    let paths = BTreeSet::from_iter(
+      self.index_diff.keys().chain(self.workspace_diff.keys()),
+    );
+
+    for path in paths {
+      ctx.println(format!(
+        "{} {}",
+        self.status_for(&path),
+        PathBuf::from(path).display()
+      ));
+    }
+
+    for spec in self.untracked.keys() {
+      ctx.println(format!("?? {}", PathBuf::from(spec).display()));
+    }
+  }
+
+  #[rustfmt::skip]
+  fn print_full(&self, ctx: &Context) {
+    self.print_changes(ctx, "Changes to be committed", &self.index_diff);
+    self.print_changes(ctx, "Changes not staged for commit", &self.workspace_diff);
+    self.print_changes(ctx, "Untracked files", &self.untracked);
+    self.print_commit_status(ctx);
+  }
+
+  fn print_changes(
+    &self,
+    ctx: &Context,
+    prefix: &str,
+    changeset: &BTreeMap<OsString, ChangeType>,
+  ) {
+    if changeset.len() == 0 {
+      return;
+    }
+
+    ctx.println(format!("{}:", prefix));
+
+    for (path, kind) in changeset {
+      let status = if let ChangeType::Untracked = kind {
+        "".to_string()
+      } else {
+        format!("{:<12}", kind.long_display().to_string() + ":")
+      };
+
+      ctx.println(format!("\t{}{}", status, PathBuf::from(path).display()));
+    }
+
+    ctx.println("".to_string());
+  }
+
+  fn print_commit_status(&self, ctx: &Context) {
+    if self.index_diff.len() > 0 {
+      return;
+    }
+
+    if self.workspace_diff.len() > 0 {
+      ctx.println("no changes added to commit".into())
+    } else if self.untracked.len() > 0 {
+      ctx.println("nothing added to commit but untracked files present".into())
+    } else {
+      ctx.println("nothing to commit, working tree clean".into())
+    }
+  }
 }
 
 #[cfg(test)]
@@ -279,7 +353,7 @@ mod tests {
     tr.write_file("file.txt", "file content");
     tr.write_file("other.txt", "more content");
 
-    let stdout = tr.run_pidgit(vec!["status"]).unwrap();
+    let stdout = tr.run_pidgit(vec!["status", "-s"]).unwrap();
     assert_status(stdout, "?? file.txt\n?? other.txt");
   }
 
@@ -291,7 +365,7 @@ mod tests {
 
     tr.write_file("file.txt", "uncommitted");
 
-    let stdout = tr.run_pidgit(vec!["status"]).unwrap();
+    let stdout = tr.run_pidgit(vec!["status", "-s"]).unwrap();
     assert_status(stdout, "?? file.txt");
   }
 
@@ -301,7 +375,7 @@ mod tests {
     tr.write_file("file.txt", "top-level file");
     tr.write_file("dir/nested.txt", "nested file");
 
-    let stdout = tr.run_pidgit(vec!["status"]).unwrap();
+    let stdout = tr.run_pidgit(vec!["status", "-s"]).unwrap();
     assert_status(stdout, "?? dir/\n?? file.txt");
   }
 
@@ -314,7 +388,7 @@ mod tests {
     tr.write_file("a/outer.txt", "outer untracked file");
     tr.write_file("a/b/c/nested.txt", "more deeply nested file");
 
-    let stdout = tr.run_pidgit(vec!["status"]).unwrap();
+    let stdout = tr.run_pidgit(vec!["status", "-s"]).unwrap();
     assert_status(stdout, "?? a/b/c/\n?? a/outer.txt");
   }
 
@@ -323,11 +397,11 @@ mod tests {
     let tr = new_empty_repo();
     tr.mkdir("outer");
 
-    let stdout = tr.run_pidgit(vec!["status"]).unwrap();
+    let stdout = tr.run_pidgit(vec!["status", "-s"]).unwrap();
     assert_eq!(stdout, "");
 
     tr.write_file("outer/inner/file.txt", "a file");
-    let stdout = tr.run_pidgit(vec!["status"]).unwrap();
+    let stdout = tr.run_pidgit(vec!["status", "-s"]).unwrap();
     assert_status(stdout, "?? outer/");
   }
 
@@ -337,12 +411,12 @@ mod tests {
     tr.write_file("file.txt", "original content\n");
     tr.commit_all();
 
-    let stdout = tr.run_pidgit(vec!["status"]).unwrap();
+    let stdout = tr.run_pidgit(vec!["status", "-s"]).unwrap();
     assert_eq!(stdout, "");
 
     tr.write_file("file.txt", "original_content\nplus another line\n");
 
-    let stdout = tr.run_pidgit(vec!["status"]).unwrap();
+    let stdout = tr.run_pidgit(vec!["status", "-s"]).unwrap();
     assert_status(stdout, " M file.txt");
   }
 
@@ -354,7 +428,7 @@ mod tests {
 
     tr.chmod("file.txt", 0o755);
 
-    let stdout = tr.run_pidgit(vec!["status"]).unwrap();
+    let stdout = tr.run_pidgit(vec!["status", "-s"]).unwrap();
     assert_status(stdout, " M file.txt");
   }
 
@@ -366,7 +440,7 @@ mod tests {
 
     tr.write_file("file.txt", "9 cats\n");
 
-    let stdout = tr.run_pidgit(vec!["status"]).unwrap();
+    let stdout = tr.run_pidgit(vec!["status", "-s"]).unwrap();
     assert_status(stdout, " M file.txt");
   }
 
@@ -378,7 +452,7 @@ mod tests {
 
     tr.rm_file("file.txt");
 
-    let stdout = tr.run_pidgit(vec!["status"]).unwrap();
+    let stdout = tr.run_pidgit(vec!["status", "-s"]).unwrap();
     assert_status(stdout, " D file.txt");
   }
 
@@ -400,7 +474,7 @@ mod tests {
     tr.write_file("a/4.txt", "four\n");
     tr.run_pidgit(vec!["add", "."]).unwrap();
 
-    let stdout = tr.run_pidgit(vec!["status"]).unwrap();
+    let stdout = tr.run_pidgit(vec!["status", "-s"]).unwrap();
     assert_status(stdout, "A  a/4.txt");
   }
 
@@ -411,7 +485,7 @@ mod tests {
     tr.write_file("d/e/5.txt", "five\n");
     tr.run_pidgit(vec!["add", "."]).unwrap();
 
-    let stdout = tr.run_pidgit(vec!["status"]).unwrap();
+    let stdout = tr.run_pidgit(vec!["status", "-s"]).unwrap();
     assert_status(stdout, "A  d/e/5.txt");
   }
 
@@ -422,7 +496,7 @@ mod tests {
     tr.chmod("1.txt", 0o755);
     tr.run_pidgit(vec!["add", "."]).unwrap();
 
-    let stdout = tr.run_pidgit(vec!["status"]).unwrap();
+    let stdout = tr.run_pidgit(vec!["status", "-s"]).unwrap();
     assert_status(stdout, "M  1.txt");
   }
 
@@ -433,7 +507,7 @@ mod tests {
     tr.write_file("a/b/3.txt", "tre\n");
     tr.run_pidgit(vec!["add", "."]).unwrap();
 
-    let stdout = tr.run_pidgit(vec!["status"]).unwrap();
+    let stdout = tr.run_pidgit(vec!["status", "-s"]).unwrap();
     assert_status(stdout, "M  a/b/3.txt");
   }
 
@@ -445,7 +519,7 @@ mod tests {
     tr.rm_file(".pidgit/index");
     tr.run_pidgit(vec!["add", "."]).expect("bad add!");
 
-    let stdout = tr.run_pidgit(vec!["status"]).unwrap();
+    let stdout = tr.run_pidgit(vec!["status", "-s"]).unwrap();
     assert_status(stdout, "D  a/b/3.txt");
   }
 
@@ -457,7 +531,7 @@ mod tests {
     tr.rm_file(".pidgit/index");
     tr.run_pidgit(vec!["add", "."]).expect("bad add!");
 
-    let stdout = tr.run_pidgit(vec!["status"]).unwrap();
+    let stdout = tr.run_pidgit(vec!["status", "-s"]).unwrap();
     assert_status(stdout, "D  a/2.txt\nD  a/b/3.txt");
   }
 }
