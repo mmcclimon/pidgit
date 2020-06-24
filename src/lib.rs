@@ -1,5 +1,6 @@
 // modules
 pub mod cmd;
+mod diff;
 mod errors;
 mod index;
 mod lockfile;
