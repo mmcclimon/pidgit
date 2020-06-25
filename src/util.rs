@@ -79,12 +79,20 @@ pub fn compute_sha_for_path(
   Ok(sha)
 }
 
-pub fn colored(s: &str, color: Color) -> ANSIGenericString<str> {
+fn should_color() -> bool {
   use atty::Stream;
 
-  if !atty::is(Stream::Stdout) {
-    Style::new().paint(s)
-  } else {
+  if cfg!(test) {
+    return false;
+  }
+
+  atty::is(Stream::Stdout)
+}
+
+pub fn colored(s: &str, color: Color) -> ANSIGenericString<str> {
+  if should_color() {
     color.paint(s)
+  } else {
+    Style::new().paint(s)
   }
 }
