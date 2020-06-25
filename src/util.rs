@@ -1,3 +1,7 @@
+mod wrapping_vec;
+
+pub use wrapping_vec::WrappingVec;
+
 use ansi_term::{ANSIGenericString, Color, Style};
 use sha1::Sha1;
 use std::fs::Metadata;

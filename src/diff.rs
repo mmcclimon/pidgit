@@ -1,45 +1,25 @@
-#[derive(Debug)]
-struct Myers {
-  a: Vec<String>,
-  b: Vec<String>,
-}
+use crate::util::WrappingVec;
 
-#[derive(Debug, Clone)]
-struct Arr<T: Default + Clone> {
-  size:    usize,
-  storage: Vec<T>,
+#[derive(Debug)]
+enum DiffType {
+  Ins,
+  Del,
+  Eql,
 }
 
 #[derive(Debug)]
 struct Trace(usize, usize, usize, usize);
 
-impl<T: Default + Clone> Arr<T> {
-  fn new(size: usize) -> Self {
-    Self {
-      storage: vec![Default::default(); size],
-      size,
-    }
-  }
+#[derive(Debug)]
+struct Edit(DiffType, String);
+
+#[derive(Debug)]
+struct Myers {
+  a: WrappingVec<String>,
+  b: WrappingVec<String>,
 }
 
-fn umod(n: isize, k: usize) -> usize {
-  let k = k as isize;
-  (((n % k) + k) % k) as usize
-}
-
-impl<T: Default + Clone> std::ops::Index<isize> for Arr<T> {
-  type Output = T;
-  fn index(&self, idx: isize) -> &Self::Output {
-    &self.storage[umod(idx, self.size)]
-  }
-}
-
-impl<T: Default + Clone> std::ops::IndexMut<isize> for Arr<T> {
-  fn index_mut(&mut self, idx: isize) -> &mut Self::Output {
-    &mut self.storage[umod(idx, self.size)]
-  }
-}
-
+#[rustfmt::skip]
 impl Trace {
   fn new<T>(prev_x: T, prev_y: T, x: T, y: T) -> Self
   where
@@ -55,28 +35,13 @@ impl Trace {
     )
   }
 
-  fn prev_x(&self) -> usize {
-    self.0
-  }
-  fn prev_y(&self) -> usize {
-    self.1
-  }
-  fn x(&self) -> usize {
-    self.2
-  }
-  fn y(&self) -> usize {
-    self.3
-  }
+  fn prev_x(&self) -> usize { self.0 }
+  fn prev_y(&self) -> usize { self.1 }
+  fn x(&self) -> usize { self.2 }
+  fn y(&self) -> usize { self.3 }
 }
 
-#[derive(Debug)]
-enum DiffLine {
-  Ins,
-  Del,
-  Eql,
-}
-
-impl std::fmt::Display for DiffLine {
+impl std::fmt::Display for DiffType {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     let c = match self {
       Self::Ins => '+',
@@ -86,9 +51,6 @@ impl std::fmt::Display for DiffLine {
     write!(f, "{}", c)
   }
 }
-
-#[derive(Debug)]
-struct Edit(DiffLine, String);
 
 impl std::fmt::Display for Edit {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -100,8 +62,8 @@ impl std::fmt::Display for Edit {
 impl Myers {
   fn new(a: String, b: String) -> Self {
     Self {
-      a: a.lines().map(|s| s.to_string()).collect(),
-      b: b.lines().map(|s| s.to_string()).collect(),
+      a: a.lines().map(|s| s.to_string()).collect::<Vec<_>>().into(),
+      b: b.lines().map(|s| s.to_string()).collect::<Vec<_>>().into(),
     }
   }
 
@@ -111,12 +73,12 @@ impl Myers {
       let a_line = &self.a.get(trace.prev_x());
       let b_line = &self.b.get(trace.prev_y());
 
-      if trace.x() == trace.prev_x() && b_line.is_some() {
-        diff.push(Edit(DiffLine::Ins, b_line.unwrap().clone()))
-      } else if trace.y() == trace.prev_y() && a_line.is_some() {
-        diff.push(Edit(DiffLine::Del, a_line.unwrap().clone()))
+      if trace.x() == trace.prev_x() {
+        diff.push(Edit(DiffType::Ins, b_line.unwrap().clone()))
+      } else if trace.y() == trace.prev_y() {
+        diff.push(Edit(DiffType::Del, a_line.unwrap().clone()))
       } else {
-        diff.push(Edit(DiffLine::Eql, a_line.unwrap().clone()))
+        diff.push(Edit(DiffType::Eql, a_line.unwrap().clone()))
       }
     }
 
@@ -124,12 +86,12 @@ impl Myers {
     diff
   }
 
-  fn shortest_edit(&self) -> Vec<Arr<isize>> {
+  fn shortest_edit(&self) -> Vec<WrappingVec<isize>> {
     let n = self.a.len() as isize;
     let m = self.b.len() as isize;
     let max = m + n;
 
-    let mut v: Arr<isize> = Arr::new(2 * max as usize + 1);
+    let mut v: WrappingVec<isize> = WrappingVec::new(2 * max as usize + 1);
     let mut trace = vec![];
 
     v[1] = 0;
@@ -146,10 +108,7 @@ impl Myers {
 
         let mut y = x - k;
 
-        while x < n
-          && y < m
-          && self.a[umod(x, n as usize)] == self.b[umod(y, m as usize)]
-        {
+        while x < n && y < m && self.a[x] == self.b[y] {
           x += 1;
           y += 1;
         }
@@ -209,6 +168,7 @@ mod tests {
 
   #[test]
   fn junk() {
+    // this isn't really a test, but is useful for playing around
     let a = "ABCABBA".split("").skip(1).collect::<Vec<_>>().join("\n");
     let b = "CBABAC".split("").skip(1).collect::<Vec<_>>().join("\n");
 
@@ -217,7 +177,5 @@ mod tests {
     for line in diff {
       println!("{}", line);
     }
-
-    // Myers::diff("a\n")
   }
 }
