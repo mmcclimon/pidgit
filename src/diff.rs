@@ -11,7 +11,7 @@ enum DiffType {
 struct Trace(usize, usize, usize, usize);
 
 #[derive(Debug)]
-struct Edit(DiffType, String);
+struct Edit<'d>(DiffType, &'d str);
 
 #[derive(Debug)]
 struct Myers {
@@ -52,7 +52,7 @@ impl std::fmt::Display for DiffType {
   }
 }
 
-impl std::fmt::Display for Edit {
+impl<'d> std::fmt::Display for Edit<'d> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     write!(f, "{}{}", self.0, self.1)
   }
@@ -74,11 +74,11 @@ impl Myers {
       let b_line = &self.b.get(trace.prev_y());
 
       if trace.x() == trace.prev_x() {
-        diff.push(Edit(DiffType::Ins, b_line.unwrap().clone()))
+        diff.push(Edit(DiffType::Ins, b_line.unwrap()))
       } else if trace.y() == trace.prev_y() {
-        diff.push(Edit(DiffType::Del, a_line.unwrap().clone()))
+        diff.push(Edit(DiffType::Del, a_line.unwrap()))
       } else {
-        diff.push(Edit(DiffType::Eql, a_line.unwrap().clone()))
+        diff.push(Edit(DiffType::Eql, a_line.unwrap()))
       }
     }
 
