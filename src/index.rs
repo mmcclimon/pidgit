@@ -143,9 +143,14 @@ impl Index {
     reader.read_exact(&mut buf32)?;
     let version = u32::from_be_bytes(buf32);
 
-    if version != 2 {
-      return index_error("unsupported index version");
+    if version != 2 && version != 3 {
+      return index_error(&format!(
+        "unsupported index version (want 2/3, have {})",
+        version
+      ));
     }
+
+    self.version = version;
 
     // 32-bit number of index entries.
     reader.read_exact(&mut buf32)?;
@@ -220,6 +225,17 @@ impl Index {
       reader.read_exact(&mut flagbuf)?;
       let flags = EntryFlags::from(&flagbuf);
 
+      // (Version 3 or later) A 16-bit field, only applicable if the
+      // "extended flag" above is 1, split into (high to low bits).
+      //   1-bit reserved for future
+      //   1-bit skip-worktree flag (used by sparse checkout)
+      //   1-bit intent-to-add flag (used by "git add -N")
+      //   13-bit unused, must be zero
+      if flags.is_extended() {
+        // skip the extended flags, for now
+        reader.seek(std::io::SeekFrom::Current(2))?;
+      }
+
       // Entry path name (variable length) relative to top level directory
       let mut namebuf = vec![];
       reader.read_until(b'\0', &mut namebuf)?;
@@ -284,7 +300,7 @@ impl Index {
 
     let mut header: Vec<u8> = Vec::with_capacity(12);
     header.extend("DIRC".as_bytes());
-    header.extend(2u32.to_be_bytes().iter());
+    header.extend(self.version.to_be_bytes().iter());
     header.extend(self.num_entries().to_be_bytes().iter());
 
     writer.write(&header)?;
@@ -509,6 +525,10 @@ impl From<&Metadata> for EntryMeta {
 //   12-bit name length if the length is less than 0xFFF; otherwise 0xFFF
 //   is stored in this field.
 impl EntryFlags {
+  fn storage(&self) -> &BitVec {
+    &self.0
+  }
+
   pub fn as_bytes(&self) -> Vec<u8> {
     self.0.to_bytes()
   }
@@ -525,6 +545,10 @@ impl EntryFlags {
     let pathlen = BitVec::from_bytes(&pathlen.to_be_bytes());
     flags.or(&pathlen);
     Self(flags)
+  }
+
+  pub fn is_extended(&self) -> bool {
+    self.storage().get(1).unwrap()
   }
 }
 
