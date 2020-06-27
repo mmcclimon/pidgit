@@ -18,6 +18,7 @@ test = false
 [dependencies]
 ansi_term = "0.12"
 atty = "0.2"
+bit-vec = "0.6"
 chrono = "0.4"
 clap = "2.3"
 flate2 = "1.0"

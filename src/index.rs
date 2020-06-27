@@ -8,11 +8,13 @@ use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 
+use bit_vec::BitVec;
+
 use crate::prelude::*;
 use crate::Lockfile;
 
 const INDEX_VERSION: u32 = 2;
-const MAX_PATH_SIZE: usize = 0xfff;
+const MAX_PATH_SIZE: u16 = 0xfff;
 
 pub struct Index {
   version:  u32,
@@ -25,10 +27,13 @@ pub struct Index {
 pub struct IndexEntry {
   meta:     EntryMeta,
   pub sha:  String,
-  flags:    u16,
+  flags:    EntryFlags,
   pub name: OsString,
   changed:  bool,
 }
+
+#[derive(Debug)]
+pub struct EntryFlags(BitVec);
 
 #[derive(Eq, PartialEq)]
 pub struct EntryMeta {
@@ -62,8 +67,8 @@ impl fmt::Debug for IndexEntry {
     f.debug_struct("IndexEntry")
       .field("name", &self.name)
       .field("sha", &self.sha)
-      .field("flags", &format_args!("{:018b}", &self.flags))
-      .field("meta",&format_args!("{:?}", self.meta))
+      .field("flags", &self.flags)
+      .field("meta",&self.meta)
       .finish()
   }
 }
@@ -213,7 +218,7 @@ impl Index {
       //   is stored in this field.
       let mut flagbuf = [0u8; 2];
       reader.read_exact(&mut flagbuf)?;
-      let flags = u16::from_be_bytes(flagbuf);
+      let flags = EntryFlags::from(&flagbuf);
 
       // Entry path name (variable length) relative to top level directory
       let mut namebuf = vec![];
@@ -391,17 +396,7 @@ impl IndexEntry {
   }
 
   pub fn new_from_data(name: OsString, sha: String, stat: Metadata) -> Self {
-    let namelen = name.len();
-
-    if namelen > MAX_PATH_SIZE {
-      panic!("uh oh, path size is too big");
-    }
-
-    // TODO: Figure out flags; for now, I think storing just the name length is
-    // sufficient. I think eventually I will want some sort of bitvector here.
-    let mut flags = 0u16;
-    flags = flags | (namelen as u16);
-
+    let flags = EntryFlags::from_path(&name);
     let meta = EntryMeta::from(&stat);
 
     IndexEntry {
@@ -420,7 +415,7 @@ impl IndexEntry {
     // I think this is probably not very efficient.
     ret.extend(self.meta.as_bytes());
     ret.extend(hex::decode(&self.sha).unwrap());
-    ret.extend(self.flags.to_be_bytes().iter());
+    ret.extend(self.flags.as_bytes().iter());
     ret.extend(self.name.as_os_str().as_bytes());
     ret.push(0);
 
@@ -504,6 +499,38 @@ impl From<&Metadata> for EntryMeta {
       gid:        meta.gid(),
       size:       meta.size() as u32,
     }
+  }
+}
+
+// A 16-bit 'flags' field split into (high to low bits)
+//   1-bit assume-valid flag
+//   1-bit extended flag (must be zero in version 2)
+//   2-bit stage (during merge)
+//   12-bit name length if the length is less than 0xFFF; otherwise 0xFFF
+//   is stored in this field.
+impl EntryFlags {
+  pub fn as_bytes(&self) -> Vec<u8> {
+    self.0.to_bytes()
+  }
+
+  pub fn from_path(path: &OsString) -> Self {
+    let mut pathlen = path.len() as u16;
+
+    if pathlen > MAX_PATH_SIZE {
+      pathlen = MAX_PATH_SIZE;
+    }
+
+    // TODO: For now, I think storing just the name length is sufficient.
+    let mut flags = BitVec::from_elem(16, false);
+    let pathlen = BitVec::from_bytes(&pathlen.to_be_bytes());
+    flags.or(&pathlen);
+    Self(flags)
+  }
+}
+
+impl From<&[u8; 2]> for EntryFlags {
+  fn from(bytes: &[u8; 2]) -> Self {
+    Self(BitVec::from_bytes(bytes))
   }
 }
 
