@@ -56,43 +56,10 @@ fn default_ftignore() -> HashSet<OsString> {
 }
 
 impl Repository {
-  pub fn from_work_tree(dir: &Path) -> Result<Self> {
-    if !dir.is_dir() {
-      return Err(PidgitError::Generic(format!(
-        "cannot instantiate repo from working tree: {} is not a directory",
-        dir.display()
-      )));
-    }
-
+  // these paths must be canonicalized
+  fn new(work_dir: &Path, git_dir: &Path) -> Result<Self> {
     let workspace = Workspace {
-      path:     dir.canonicalize()?.to_path_buf(),
-      ignore:   default_ignore(),
-      ftignore: default_ftignore(),
-    };
-
-    let git_dir = dir.join(GIT_DIR_NAME);
-    let mut index = Index::new(git_dir.join("index"));
-    index.load()?;
-
-    Ok(Repository {
-      workspace,
-      git_dir,
-      index: RefCell::new(index),
-    })
-  }
-
-  pub fn from_git_dir(git_dir: &Path) -> Result<Self> {
-    let path = git_dir.canonicalize()?;
-
-    let parent = path.parent().ok_or_else(|| {
-      PidgitError::Generic(format!(
-        "cannot resolve git_dir: {} has no parent",
-        path.display()
-      ))
-    })?;
-
-    let workspace = Workspace {
-      path:     parent.to_path_buf(),
+      path:     work_dir.to_path_buf(),
       ignore:   default_ignore(),
       ftignore: default_ftignore(),
     };
@@ -107,6 +74,30 @@ impl Repository {
     })
   }
 
+  pub fn from_work_tree(dir: &Path) -> Result<Self> {
+    if !dir.is_dir() {
+      return Err(PidgitError::Generic(format!(
+        "cannot instantiate repo from working tree: {} is not a directory",
+        dir.display()
+      )));
+    }
+
+    Self::new(&dir.canonicalize()?, &dir.join(GIT_DIR_NAME))
+  }
+
+  pub fn from_git_dir(git_dir: &Path) -> Result<Self> {
+    let path = git_dir.canonicalize()?;
+
+    let parent = path.parent().ok_or_else(|| {
+      PidgitError::Generic(format!(
+        "cannot resolve git_dir: {} has no parent",
+        path.display()
+      ))
+    })?;
+
+    Self::new(parent, &path)
+  }
+
   // We need to make, inside the current directory:
   // .pidgit/
   //    HEAD
@@ -118,19 +109,7 @@ impl Repository {
     let git_dir = root.canonicalize()?.join(GIT_DIR_NAME);
     DirBuilder::new().create(&git_dir)?;
 
-    let workspace = Workspace {
-      path:     root.canonicalize()?.to_path_buf(),
-      ignore:   default_ignore(),
-      ftignore: default_ftignore(),
-    };
-
-    let index = Index::new(git_dir.join("index"));
-
-    let repo = Repository {
-      workspace,
-      git_dir,
-      index: RefCell::new(index),
-    };
+    let repo = Self::new(root, &git_dir)?;
 
     // HEAD
     let mut head = repo.create_file("HEAD")?;
