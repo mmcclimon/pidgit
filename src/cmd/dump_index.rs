@@ -17,7 +17,7 @@ impl Command for DumpIndex {
 
   fn run(&self, _matches: &ArgMatches, ctx: &Context) -> Result<()> {
     let repo = ctx.repo()?;
-    let index = repo.index()?;
+    let index = repo.index();
 
     ctx.println(format!("{:#?}", index));
 

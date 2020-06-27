@@ -269,6 +269,13 @@ impl From<&Index> for Tree {
   }
 }
 
+impl From<std::cell::Ref<'_, Index>> for Tree {
+  fn from(idx: std::cell::Ref<Index>) -> Self {
+    let entries = idx.entries().map(|e| e.into()).collect::<Vec<PathEntry>>();
+    Self::build(entries)
+  }
+}
+
 impl PartialOrd for PathEntry {
   fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
     // git compares files a little weirdly, so we must coerce to strings

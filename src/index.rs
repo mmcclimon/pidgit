@@ -99,6 +99,12 @@ impl Index {
     }
   }
 
+  pub fn reload(&mut self) -> Result<()> {
+    self.entries = BTreeMap::new();
+    self.parents = HashMap::new();
+    self.load()
+  }
+
   // parse this, based on
   // https://github.com/git/git/blob/master/Documentation/technical/index-format.txt
   // Here, I am ignoring extensions entirely!

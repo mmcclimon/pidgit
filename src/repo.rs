@@ -1,5 +1,6 @@
 use flate2::{write::ZlibEncoder, Compression};
 use sha1::Sha1;
+use std::cell::{Ref, RefCell, RefMut};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::ffi::OsString;
 use std::fs::{DirBuilder, File};
@@ -27,6 +28,7 @@ const CONFIG: &str = "\
 pub struct Repository {
   workspace: Workspace,
   git_dir:   PathBuf,
+  index:     RefCell<Index>,
 }
 
 #[derive(Debug)]
@@ -68,9 +70,14 @@ impl Repository {
       ftignore: default_ftignore(),
     };
 
+    let git_dir = dir.join(GIT_DIR_NAME);
+    let mut index = Index::new(git_dir.join("index"));
+    index.load()?;
+
     Ok(Repository {
       workspace,
-      git_dir: dir.join(GIT_DIR_NAME),
+      git_dir,
+      index: RefCell::new(index),
     })
   }
 
@@ -90,9 +97,13 @@ impl Repository {
       ftignore: default_ftignore(),
     };
 
+    let mut index = Index::new(git_dir.join("index"));
+    index.load()?;
+
     Ok(Repository {
       workspace,
       git_dir: git_dir.to_path_buf(),
+      index: RefCell::new(index),
     })
   }
 
@@ -113,7 +124,13 @@ impl Repository {
       ftignore: default_ftignore(),
     };
 
-    let repo = Repository { workspace, git_dir };
+    let index = Index::new(git_dir.join("index"));
+
+    let repo = Repository {
+      workspace,
+      git_dir,
+      index: RefCell::new(index),
+    };
 
     // HEAD
     let mut head = repo.create_file("HEAD")?;
@@ -131,8 +148,7 @@ impl Repository {
     repo.create_dir("refs/tags")?;
     repo.create_dir("refs/remotes")?;
 
-    let idx = Index::new(repo.git_dir().join("index"));
-    idx.force_write()?;
+    repo.index.borrow_mut().force_write()?;
 
     Ok(repo)
   }
@@ -305,14 +321,16 @@ impl Repository {
     }
   }
 
-  pub fn index(&self) -> Result<Index> {
-    let mut idx = Index::new(self.git_dir().join("index"));
-    idx.load()?;
-    Ok(idx)
+  pub fn index(&self) -> Ref<Index> {
+    self.index.borrow()
   }
 
-  pub fn write_index(&self, index: &Index) -> Result<()> {
-    index.write()?;
+  pub fn index_mut(&self) -> RefMut<Index> {
+    self.index.borrow_mut()
+  }
+
+  pub fn write_index(&self) -> Result<()> {
+    self.index.borrow_mut().write()?;
     Ok(())
   }
 
@@ -366,8 +384,7 @@ impl Repository {
       msg.push_str("\n");
     }
 
-    let index = self.index()?;
-    let tree = Tree::from(&index);
+    let tree = Tree::from(self.index());
 
     let commit = Commit {
       tree: tree.sha().hexdigest(),

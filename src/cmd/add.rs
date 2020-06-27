@@ -27,7 +27,7 @@ impl Command for Add {
     let repo = ctx.repo()?;
     let workspace = repo.workspace();
 
-    let mut index = repo.index()?;
+    let mut index = repo.index_mut();
 
     for raw_path in matches.values_of("pathspec").unwrap() {
       let pb = PathBuf::from(raw_path);
@@ -48,7 +48,7 @@ impl Command for Add {
       }
     }
 
-    repo.write_index(&index)?;
+    index.write()?;
 
     Ok(())
   }

@@ -1,4 +1,5 @@
 use clap::{App, Arg, ArgMatches};
+use std::cell::RefMut;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::ffi::OsString;
 use std::fs::Metadata;
@@ -23,7 +24,7 @@ enum ChangeType {
 #[derive(Debug)]
 struct StatusHelper<'c> {
   repo:           &'c Repository,
-  index:          &'c mut Index,
+  index:          RefMut<'c, Index>,
   stats:          HashMap<OsString, Metadata>,
   untracked:      BTreeMap<OsString, ChangeType>,
   index_diff:     BTreeMap<OsString, ChangeType>,
@@ -59,7 +60,7 @@ impl Command for Status {
     // we accumulate state in the helper, then print it all out.
     let mut helper = StatusHelper {
       repo,
-      index: &mut repo.index()?,
+      index: repo.index_mut(),
       untracked: BTreeMap::new(),
       stats: HashMap::new(),
       head_diff: HashMap::new(),
@@ -544,6 +545,7 @@ mod tests {
 
     tr.rm_file("a/b/3.txt");
     tr.rm_file(".pidgit/index");
+    tr.repo.index_mut().reload().expect("couldn't reload index");
     tr.run_pidgit(vec!["add", "."]).expect("bad add!");
 
     let stdout = tr.run_pidgit(vec!["status", "-s"]).unwrap();
@@ -556,6 +558,7 @@ mod tests {
 
     tr.rm_rf("a");
     tr.rm_file(".pidgit/index");
+    tr.repo.index_mut().reload().expect("couldn't reload index");
     tr.run_pidgit(vec!["add", "."]).expect("bad add!");
 
     let stdout = tr.run_pidgit(vec!["status", "-s"]).unwrap();

@@ -18,7 +18,7 @@ impl Command for LsFiles {
   }
 
   fn run(&self, _matches: &ArgMatches, ctx: &Context) -> Result<()> {
-    for key in ctx.repo()?.index()?.keys() {
+    for key in ctx.repo()?.index().keys() {
       ctx.println(format!("{}", PathBuf::from(key).display()));
     }
 
