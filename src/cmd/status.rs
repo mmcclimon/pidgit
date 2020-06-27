@@ -1,42 +1,22 @@
 use clap::{App, Arg, ArgMatches};
-use std::cell::RefMut;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsString;
-use std::fs::Metadata;
 use std::path::PathBuf;
 
 use crate::cmd::Context;
-use crate::index::Index;
-use crate::object::{PathEntry, TreeItem};
 use crate::prelude::*;
+use crate::repo::{ChangeType, Status};
 
 #[derive(Debug)]
-struct Status;
+struct StatusCmd;
 
-#[derive(Debug, Eq, PartialEq, Hash)]
-enum ChangeType {
-  Modified,
-  Deleted,
-  Added,
-  Untracked,
-}
-
-#[derive(Debug)]
-struct StatusHelper<'c> {
-  repo:           &'c Repository,
-  index:          RefMut<'c, Index>,
-  stats:          HashMap<OsString, Metadata>,
-  untracked:      BTreeMap<OsString, ChangeType>,
-  index_diff:     BTreeMap<OsString, ChangeType>,
-  workspace_diff: BTreeMap<OsString, ChangeType>,
-  head_diff:      HashMap<OsString, PathEntry>,
-}
+struct StatusHelper<'r>(Status<'r>);
 
 pub fn new() -> Box<dyn Command> {
-  Box::new(Status {})
+  Box::new(StatusCmd {})
 }
 
-impl Command for Status {
+impl Command for StatusCmd {
   fn app(&self) -> App<'static, 'static> {
     // this doesn't have all the smarts git does, for now
     App::new("status")
@@ -57,22 +37,8 @@ impl Command for Status {
   fn run(&self, matches: &ArgMatches, ctx: &Context) -> Result<()> {
     let repo = ctx.repo()?;
 
-    // we accumulate state in the helper, then print it all out.
-    let mut helper = StatusHelper {
-      repo,
-      index: repo.index_mut(),
-      untracked: BTreeMap::new(),
-      stats: HashMap::new(),
-      head_diff: HashMap::new(),
-      index_diff: BTreeMap::new(),
-      workspace_diff: BTreeMap::new(),
-    };
-
-    let workspace = repo.workspace();
-
-    helper.scan_workspace(workspace.root())?;
-    helper.load_head()?;
-    helper.detect_changes();
+    let status = repo.status()?;
+    let helper = StatusHelper(status);
 
     // print!
     if matches.is_present("short") {
@@ -82,194 +48,19 @@ impl Command for Status {
     } else {
       helper.print_full(ctx);
     }
-    // update the index, in case any of the stats have changed
-    helper.index.write()?;
 
     Ok(())
-  }
-}
-
-impl ChangeType {
-  fn display(&self) -> &'static str {
-    match self {
-      Self::Modified => "M",
-      Self::Deleted => "D",
-      Self::Added => "A",
-      Self::Untracked => "?",
-    }
-  }
-
-  fn long_display(&self) -> &'static str {
-    match self {
-      Self::Modified => "modified",
-      Self::Deleted => "deleted",
-      Self::Added => "new file",
-      Self::Untracked => "untracked file",
-    }
   }
 }
 
 impl StatusHelper<'_> {
-  fn scan_workspace(&mut self, base: &PathBuf) -> Result<()> {
-    let ws = self.repo.workspace();
-    for (path_str, stat) in ws.list_dir(base)? {
-      let is_dir = stat.is_dir();
-
-      if self.index.is_tracked(&path_str) {
-        if is_dir {
-          self.scan_workspace(&ws.canonicalize(&path_str))?;
-        } else if stat.is_file() {
-          self.stats.insert(path_str.clone(), stat.clone());
-        }
-      } else if self.is_trackable(&path_str, &stat) {
-        let suffix = if is_dir {
-          std::path::MAIN_SEPARATOR.to_string()
-        } else {
-          "".to_string()
-        };
-
-        let mut name = path_str.clone();
-        name.push(suffix);
-
-        self.untracked.insert(name, ChangeType::Untracked);
-      }
-    }
-
-    Ok(())
-  }
-
-  // a path is trackable iff it contains a file somewhere inside it.
-  fn is_trackable(&self, path: &OsString, stat: &Metadata) -> bool {
-    if stat.is_file() {
-      return !self.index.is_tracked(&path);
-    }
-
-    if !stat.is_dir() {
-      return false;
-    }
-
-    let ws = self.repo.workspace();
-
-    ws.list_dir(&path.into())
-      .expect(&format!("could not list dir {:?}", path))
-      .iter()
-      .any(|(path, stat)| self.is_trackable(path, stat))
-  }
-
-  fn load_head(&mut self) -> Result<()> {
-    let head = self.repo.head();
-    if head.is_none() {
-      return Ok(());
-    }
-
-    let tree = head.unwrap().tree().to_string();
-    self.read_tree(&tree, &PathBuf::from(""))?;
-
-    Ok(())
-  }
-
-  fn read_tree(&mut self, sha: &str, prefix: &PathBuf) -> Result<()> {
-    let tree = self.repo.resolve_object(sha)?.as_tree()?;
-
-    for (path, entry) in tree.entries() {
-      if let TreeItem::Entry(e) = entry {
-        let fullpath = prefix.join(path);
-        if e.is_tree() {
-          self.read_tree(e.sha(), &fullpath)?;
-        } else {
-          self.head_diff.insert(fullpath.into(), e.clone());
-        }
-      }
-    }
-
-    Ok(())
-  }
-
-  fn detect_changes(&mut self) {
-    self.check_index();
-    self.check_head();
-  }
-
-  fn check_index(&mut self) {
-    // Check the working tree: for every file in the index, if our stat is
-    // different than it, it's changed.
-    for entry in self.index.entries_mut() {
-      let path = &entry.name;
-      let stat = self.stats.get(path);
-
-      if stat.is_none() {
-        self
-          .workspace_diff
-          .insert(path.clone(), ChangeType::Deleted);
-        continue;
-      }
-
-      let stat = stat.unwrap();
-
-      if !entry.matches_stat(stat) {
-        self
-          .workspace_diff
-          .insert(path.clone(), ChangeType::Modified);
-        continue;
-      }
-
-      if entry.matches_time(stat) {
-        continue;
-      }
-
-      // Check the content
-      let sha = util::compute_sha_for_path(
-        &self.repo.workspace().canonicalize(path),
-        Some(stat),
-      )
-      .expect("could not calculate sha")
-      .hexdigest();
-
-      if sha == entry.sha {
-        // if we've gotten here, we know the index stat time is stale
-        entry.update_meta(stat);
-        continue;
-      } else {
-        self
-          .workspace_diff
-          .insert(path.clone(), ChangeType::Modified);
-      }
-    }
-  }
-
-  fn check_head(&mut self) {
-    // now, check against the head
-    for entry in self.index.entries() {
-      let path = &entry.name;
-
-      if !self.head_diff.contains_key(path) {
-        self.index_diff.insert(path.clone(), ChangeType::Added);
-        continue;
-      }
-
-      let have = self.head_diff.get(path).unwrap();
-
-      if have.mode() != entry.mode() || have.sha() != entry.sha {
-        self.index_diff.insert(path.clone(), ChangeType::Modified);
-        continue;
-      }
-    }
-
-    // check for files that exist in HEAD but aren't in the index
-    for key in self.head_diff.keys() {
-      if !self.index.is_tracked_file(key) {
-        self.index_diff.insert(key.clone(), ChangeType::Deleted);
-      }
-    }
-  }
-
   fn status_for(&self, path: &OsString, use_color: bool) -> String {
-    let left = match self.index_diff.get(path) {
+    let left = match self.0.index_diff().get(path) {
       Some(ct) => ct.display(),
       None => " ",
     };
 
-    let right = match self.workspace_diff.get(path) {
+    let right = match self.0.workspace_diff().get(path) {
       Some(ct) => ct.display(),
       _ => " ",
     };
@@ -289,7 +80,11 @@ impl StatusHelper<'_> {
     use std::iter::FromIterator;
 
     let paths = BTreeSet::from_iter(
-      self.index_diff.keys().chain(self.workspace_diff.keys()),
+      self
+        .0
+        .index_diff()
+        .keys()
+        .chain(self.0.workspace_diff().keys()),
     );
 
     for path in paths {
@@ -300,7 +95,7 @@ impl StatusHelper<'_> {
       ));
     }
 
-    for spec in self.untracked.keys() {
+    for spec in self.0.untracked().keys() {
       ctx.println(format!("?? {}", PathBuf::from(spec).display()));
     }
   }
@@ -309,16 +104,16 @@ impl StatusHelper<'_> {
     self.print_changes(
       ctx,
       "Changes to be committed",
-      &self.index_diff,
+      self.0.index_diff(),
       Color::Green,
     );
     self.print_changes(
       ctx,
       "Changes not staged for commit",
-      &self.workspace_diff,
+      self.0.workspace_diff(),
       Color::Red,
     );
-    self.print_changes(ctx, "Untracked files", &self.untracked, Color::Red);
+    self.print_changes(ctx, "Untracked files", self.0.untracked(), Color::Red);
     self.print_commit_status(ctx);
   }
 
@@ -352,13 +147,13 @@ impl StatusHelper<'_> {
   }
 
   fn print_commit_status(&self, ctx: &Context) {
-    if self.index_diff.len() > 0 {
+    if self.0.has_index_changes() {
       return;
     }
 
-    if self.workspace_diff.len() > 0 {
+    if self.0.has_workspace_changes() {
       ctx.println("no changes added to commit".into())
-    } else if self.untracked.len() > 0 {
+    } else if self.0.has_workspace_changes() {
       ctx.println("nothing added to commit but untracked files present".into())
     } else {
       ctx.println("nothing to commit, working tree clean".into())

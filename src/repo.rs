@@ -1,3 +1,6 @@
+mod status;
+pub use status::{ChangeType, Status};
+
 use flate2::{write::ZlibEncoder, Compression};
 use sha1::Sha1;
 use std::cell::{Ref, RefCell, RefMut};
@@ -16,12 +19,12 @@ const GIT_DIR_NAME: &str = ".pidgit";
 const HEAD: &str = "ref: refs/heads/main\n";
 const CONFIG: &str = "\
 [core]
-	repositoryformatversion = 0
-	filemode = true
-	bare = false
-	logallrefupdates = true
-	ignorecase = true
-	precomposeunicode = true
+\trepositoryformatversion = 0
+\tfilemode = true
+\tbare = false
+\tlogallrefupdates = true
+\tignorecase = true
+\tprecomposeunicode = true
 ";
 
 #[derive(Debug)]
@@ -311,6 +314,12 @@ impl Repository {
   pub fn write_index(&self) -> Result<()> {
     self.index.borrow_mut().write()?;
     Ok(())
+  }
+
+  pub fn status(&self) -> Result<Status> {
+    let mut status = Status::new(&self);
+    status.check()?;
+    Ok(status)
   }
 
   pub fn write_tree(&self, tree: &Tree) -> Result<()> {
