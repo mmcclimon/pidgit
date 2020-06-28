@@ -1,40 +1,37 @@
 use clap::{App, ArgMatches};
 
-use crate::cmd::Context;
 use crate::prelude::*;
 
 #[derive(Debug)]
 struct Init;
 
-pub fn new() -> Box<dyn Command> {
-  Box::new(Init {})
+pub fn command() -> Command {
+  (app, run)
 }
 
-impl Command for Init {
-  fn app(&self) -> App<'static, 'static> {
-    App::new("init").about("initialize a pidgit directory")
-  }
+fn app() -> ClapApp {
+  App::new("init").about("initialize a pidgit directory")
+}
 
-  fn run(&mut self, _matches: &ArgMatches, ctx: &Context) -> Result<()> {
-    if let Ok(repo) = ctx.repo() {
-      // maybe later: die if we can't initialize a repo from it
-      ctx.println(format!(
-        "{} already exists, nothing to do!",
-        repo.workspace().root().display()
-      ));
-      return Ok(());
-    }
-
-    let pwd = std::env::current_dir()?;
-    let repo = Repository::create_empty(&pwd)?;
-
+fn run(_matches: &ArgMatches, ctx: &Context) -> Result<()> {
+  if let Ok(repo) = ctx.repo() {
+    // maybe later: die if we can't initialize a repo from it
     ctx.println(format!(
-      "initialized empty pidgit repository at {}",
-      repo.git_dir().display()
+      "{} already exists, nothing to do!",
+      repo.workspace().root().display()
     ));
-
-    Ok(())
+    return Ok(());
   }
+
+  let pwd = std::env::current_dir()?;
+  let repo = Repository::create_empty(&pwd)?;
+
+  ctx.println(format!(
+    "initialized empty pidgit repository at {}",
+    repo.git_dir().display()
+  ));
+
+  Ok(())
 }
 
 #[cfg(test)]

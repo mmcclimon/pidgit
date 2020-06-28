@@ -1,42 +1,36 @@
 use clap::{App, Arg, ArgMatches};
 use std::path::PathBuf;
 
-use crate::cmd::Context;
 use crate::object::TreeItem;
 use crate::prelude::*;
 
-#[derive(Debug)]
-struct DumpTree;
-
-pub fn new() -> Box<dyn Command> {
-  Box::new(DumpTree {})
+pub fn command() -> Command {
+  (app, run)
 }
 
-impl Command for DumpTree {
-  fn app(&self) -> App<'static, 'static> {
-    App::new("dump-tree")
-      .about("dump a tree (for debugging)")
-      .arg(
-        Arg::with_name("commit") // really, should implement tree-ish
-          .default_value("HEAD")
-          .help("commit to dump"),
-      )
-  }
+fn app() -> ClapApp {
+  App::new("dump-tree")
+    .about("dump a tree (for debugging)")
+    .arg(
+      Arg::with_name("commit") // really, should implement tree-ish
+        .default_value("HEAD")
+        .help("commit to dump"),
+    )
+}
 
-  fn run(&mut self, matches: &ArgMatches, ctx: &Context) -> Result<()> {
-    let repo = ctx.repo()?;
+fn run(matches: &ArgMatches, ctx: &Context) -> Result<()> {
+  let repo = ctx.repo()?;
 
-    let to_find = matches.value_of("commit").unwrap();
-    let head = repo.resolve_object(to_find)?;
+  let to_find = matches.value_of("commit").unwrap();
+  let head = repo.resolve_object(to_find)?;
 
-    let commit = head.as_commit()?;
+  let commit = head.as_commit()?;
 
-    let tree = repo.resolve_object(commit.tree())?.into_inner();
+  let tree = repo.resolve_object(commit.tree())?.into_inner();
 
-    print_tree(&repo, &tree.sha().hexdigest(), &PathBuf::from(""))?;
+  print_tree(&repo, &tree.sha().hexdigest(), &PathBuf::from(""))?;
 
-    Ok(())
-  }
+  Ok(())
 }
 
 fn print_tree(repo: &Repository, sha: &str, prefix: &PathBuf) -> Result<()> {

@@ -16,7 +16,7 @@ pub use crate::lockfile::Lockfile;
 
 // A convenience module appropriate for glob imports
 pub mod prelude {
-  pub use crate::cmd::Command;
+  pub use crate::cmd::{ClapApp, Command, Context};
   pub use crate::errors::{PidgitError, Result};
   pub use crate::object::GitObject;
   pub use crate::repo::Repository;
@@ -79,12 +79,12 @@ impl PidgitApp {
     W: std::io::Write,
   {
     let cmd_name = app_matches.subcommand_name().expect("no subcommand!");
-    let cmd = self.commands.command_named(cmd_name); // might panic
+    let command = self.commands.command_named(cmd_name); // might panic
     let matches = app_matches.subcommand_matches(cmd_name).unwrap();
 
     let ctx = Context::new(repo, writer, pwd);
 
-    cmd.run(matches, &ctx)?;
+    command(matches, &ctx)?;
 
     Ok(())
   }

@@ -14,7 +14,11 @@ mod ls_files;
 mod rev_parse;
 mod status;
 
-pub type App = clap::App<'static, 'static>;
+pub type ClapApp = clap::App<'static, 'static>;
+
+pub type Command = (CommandApp, CommandRunner);
+pub type CommandApp = fn() -> ClapApp;
+pub type CommandRunner = fn(&ArgMatches, &Context) -> Result<()>;
 
 pub struct Context<'w> {
   writer: RefCell<Box<dyn std::io::Write + 'w>>,
@@ -23,44 +27,35 @@ pub struct Context<'w> {
 }
 
 pub struct CommandSet {
-  commands: BTreeMap<&'static str, Box<dyn Command>>,
+  commands: BTreeMap<&'static str, Command>,
 }
 
 impl CommandSet {
   pub fn new() -> Self {
     let mut commands = BTreeMap::new();
 
-    commands.insert("add", add::new());
-    commands.insert("cat-file", cat_file::new());
-    commands.insert("commit", commit::new());
-    commands.insert("dump-index", dump_index::new());
-    commands.insert("dump-tree", dump_tree::new());
-    commands.insert("hash-object", hash_object::new());
-    commands.insert("init", init::new());
-    commands.insert("log", log::new());
-    commands.insert("ls-files", ls_files::new());
-    commands.insert("rev-parse", rev_parse::new());
-    commands.insert("status", status::new());
+    commands.insert("add", add::command());
+    commands.insert("cat-file", cat_file::command());
+    commands.insert("commit", commit::command());
+    commands.insert("dump-index", dump_index::command());
+    commands.insert("dump-tree", dump_tree::command());
+    commands.insert("hash-object", hash_object::command());
+    commands.insert("init", init::command());
+    commands.insert("log", log::command());
+    commands.insert("ls-files", ls_files::command());
+    commands.insert("rev-parse", rev_parse::command());
+    commands.insert("status", status::command());
 
     Self { commands }
   }
 
-  pub fn apps(&self) -> impl IntoIterator<Item = App> + '_ {
-    self.commands.values().map(|cmd| cmd.app())
+  pub fn apps(&self) -> impl IntoIterator<Item = ClapApp> + '_ {
+    self.commands.values().map(|cmd| cmd.0())
   }
 
-  pub fn command_named<'a>(
-    &'a mut self,
-    name: &'a str,
-  ) -> &'a mut Box<dyn Command> {
-    self.commands.get_mut(name).expect("command not found!")
+  pub fn command_named<'a>(&'a mut self, name: &'a str) -> CommandRunner {
+    self.commands.get(name).expect("command not found!").1
   }
-}
-
-pub trait Command: std::fmt::Debug {
-  fn app(&self) -> App;
-
-  fn run(&mut self, matches: &ArgMatches, ctx: &Context) -> Result<()>;
 }
 
 impl<'w> Context<'w> {

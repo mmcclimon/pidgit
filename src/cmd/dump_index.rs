@@ -1,28 +1,22 @@
 use clap::{App, ArgMatches};
 
-use crate::cmd::Context;
 use crate::prelude::*;
 
-#[derive(Debug)]
-struct DumpIndex;
-
-pub fn new() -> Box<dyn Command> {
-  Box::new(DumpIndex {})
+pub fn command() -> Command {
+  (app, run)
 }
 
-impl Command for DumpIndex {
-  fn app(&self) -> App<'static, 'static> {
-    App::new("dump-index").about("dump the index file (just for debugging)")
-  }
+pub fn app() -> ClapApp {
+  App::new("dump-index").about("dump the index file (just for debugging)")
+}
 
-  fn run(&mut self, _matches: &ArgMatches, ctx: &Context) -> Result<()> {
-    let repo = ctx.repo()?;
-    let index = repo.index();
+pub fn run(_matches: &ArgMatches, ctx: &Context) -> Result<()> {
+  let repo = ctx.repo()?;
+  let index = repo.index();
 
-    ctx.println(format!("{:#?}", index));
+  ctx.println(format!("{:#?}", index));
 
-    index.write()?;
+  index.write()?;
 
-    Ok(())
-  }
+  Ok(())
 }

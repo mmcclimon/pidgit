@@ -3,72 +3,61 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsString;
 use std::path::PathBuf;
 
-use crate::cmd::Context;
 use crate::prelude::*;
 use crate::repo::{ChangeType, Status};
 
-#[derive(Debug)]
 struct StatusCmd {
-  status: Option<Status>,
+  status: Status,
 }
 
-pub fn new() -> Box<dyn Command> {
-  Box::new(StatusCmd { status: None })
+pub fn command() -> Command {
+  (app, run)
 }
 
-impl Command for StatusCmd {
-  fn app(&self) -> App<'static, 'static> {
-    // this doesn't have all the smarts git does, for now
-    App::new("status")
-      .about("show the working tree status")
-      .arg(
-        Arg::with_name("short")
-          .long("short")
-          .short("s")
-          .help("show status concisely"),
-      )
-      .arg(
-        Arg::with_name("porcelain")
-          .long("porcelain")
-          .help("machine-readable output"),
-      )
+pub fn app() -> ClapApp {
+  // this doesn't have all the smarts git does, for now
+  App::new("status")
+    .about("show the working tree status")
+    .arg(
+      Arg::with_name("short")
+        .long("short")
+        .short("s")
+        .help("show status concisely"),
+    )
+    .arg(
+      Arg::with_name("porcelain")
+        .long("porcelain")
+        .help("machine-readable output"),
+    )
+}
+
+fn run(matches: &ArgMatches, ctx: &Context) -> Result<()> {
+  let repo = ctx.repo()?;
+
+  let status = repo.status()?;
+
+  let cmd = StatusCmd { status };
+
+  // print!
+  if matches.is_present("short") {
+    cmd.print_short(ctx, true);
+  } else if matches.is_present("porcelain") {
+    cmd.print_short(ctx, false);
+  } else {
+    cmd.print_full(ctx);
   }
 
-  fn run(&mut self, matches: &ArgMatches, ctx: &Context) -> Result<()> {
-    let repo = ctx.repo()?;
-
-    let status = repo.status()?;
-    self.status = Some(status);
-
-    // print!
-    if matches.is_present("short") {
-      self.print_short(ctx, true);
-    } else if matches.is_present("porcelain") {
-      self.print_short(ctx, false);
-    } else {
-      self.print_full(ctx);
-    }
-
-    Ok(())
-  }
+  Ok(())
 }
 
 impl StatusCmd {
-  fn status(&self) -> &Status {
-    // safe to unwrap because we're calling it internally once we know it's set.
-    match self.status {
-      Some(ref s) => s,
-      None => panic!("tried to unwrap a None option"),
-    }
-  }
-
   fn status_for(&self, path: &OsString, use_color: bool) -> String {
-    let left = match self.status().index_diff().get(path) {
+    let left = match self.status.index_diff().get(path) {
       Some(ct) => ct.display(),
       None => " ",
     };
 
-    let right = match self.status().workspace_diff().get(path) {
+    let right = match self.status.workspace_diff().get(path) {
       Some(ct) => ct.display(),
       _ => " ",
     };
@@ -89,10 +78,10 @@ impl StatusCmd {
 
     let paths = BTreeSet::from_iter(
       self
-        .status()
+        .status
         .index_diff()
         .keys()
-        .chain(self.status().workspace_diff().keys()),
+        .chain(self.status.workspace_diff().keys()),
     );
 
     for path in paths {
@@ -103,7 +92,7 @@ impl StatusCmd {
       ));
     }
 
-    for spec in self.status().untracked().keys() {
+    for spec in self.status.untracked().keys() {
       ctx.println(format!("?? {}", PathBuf::from(spec).display()));
     }
   }
@@ -112,19 +101,19 @@ impl StatusCmd {
     self.print_changes(
       ctx,
       "Changes to be committed",
-      self.status().index_diff(),
+      self.status.index_diff(),
       Color::Green,
     );
     self.print_changes(
       ctx,
       "Changes not staged for commit",
-      self.status().workspace_diff(),
+      self.status.workspace_diff(),
       Color::Red,
     );
     self.print_changes(
       ctx,
       "Untracked files",
-      self.status().untracked(),
+      self.status.untracked(),
       Color::Red,
     );
     self.print_commit_status(ctx);
@@ -160,13 +149,13 @@ impl StatusCmd {
   }
 
   fn print_commit_status(&self, ctx: &Context) {
-    if self.status().has_index_changes() {
+    if self.status.has_index_changes() {
       return;
     }
 
-    if self.status().has_workspace_changes() {
+    if self.status.has_workspace_changes() {
       ctx.println("no changes added to commit".into())
-    } else if self.status().has_workspace_changes() {
+    } else if self.status.has_workspace_changes() {
       ctx.println("nothing added to commit but untracked files present".into())
     } else {
       ctx.println("nothing to commit, working tree clean".into())
