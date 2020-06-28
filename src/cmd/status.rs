@@ -10,7 +10,7 @@ use crate::repo::{ChangeType, Status};
 #[derive(Debug)]
 struct StatusCmd;
 
-struct StatusHelper<'r>(Status<'r>);
+struct StatusHelper(Status);
 
 pub fn new() -> Box<dyn Command> {
   Box::new(StatusCmd {})
@@ -53,7 +53,7 @@ impl Command for StatusCmd {
   }
 }
 
-impl StatusHelper<'_> {
+impl StatusHelper {
   fn status_for(&self, path: &OsString, use_color: bool) -> String {
     let left = match self.0.index_diff().get(path) {
       Some(ct) => ct.display(),

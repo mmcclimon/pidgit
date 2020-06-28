@@ -10,14 +10,22 @@ use crate::prelude::*;
 
 // lifetime is bound to the repository
 #[derive(Debug)]
-pub struct Status<'r> {
+struct InnerStatus<'r> {
   repo:           &'r Repository,
   index:          RefMut<'r, Index>,
   stats:          HashMap<OsString, Metadata>,
   untracked:      BTreeMap<OsString, ChangeType>,
   index_diff:     BTreeMap<OsString, ChangeType>,
   workspace_diff: BTreeMap<OsString, ChangeType>,
-  head_diff:      HashMap<OsString, PathEntry>,
+  head_diff:      BTreeMap<OsString, PathEntry>,
+}
+
+#[derive(Debug)]
+pub struct Status {
+  untracked:      BTreeMap<OsString, ChangeType>,
+  index_diff:     BTreeMap<OsString, ChangeType>,
+  workspace_diff: BTreeMap<OsString, ChangeType>,
+  head_diff:      BTreeMap<OsString, PathEntry>,
 }
 
 #[derive(Debug, Eq, PartialEq, Hash)]
@@ -29,14 +37,57 @@ pub enum ChangeType {
   Untracked,
 }
 
-impl<'r> Status<'r> {
+impl Status {
+  pub fn generate(repo: &Repository) -> Result<Self> {
+    let mut helper = InnerStatus::new(repo);
+    helper.check()?;
+    Ok(Self {
+      untracked:      helper.untracked,
+      index_diff:     helper.index_diff,
+      workspace_diff: helper.workspace_diff,
+      head_diff:      helper.head_diff,
+    })
+  }
+
+  // accessors...it would be nice to provide something better than this.
+
+  pub fn untracked(&self) -> &BTreeMap<OsString, ChangeType> {
+    &self.untracked
+  }
+
+  pub fn has_untracked_changes(&self) -> bool {
+    self.untracked.len() > 0
+  }
+
+  pub fn index_diff(&self) -> &BTreeMap<OsString, ChangeType> {
+    &self.index_diff
+  }
+
+  pub fn has_index_changes(&self) -> bool {
+    self.index_diff.len() > 0
+  }
+
+  pub fn workspace_diff(&self) -> &BTreeMap<OsString, ChangeType> {
+    &self.workspace_diff
+  }
+
+  pub fn has_workspace_changes(&self) -> bool {
+    self.workspace_diff.len() > 0
+  }
+
+  pub fn head_diff(&self) -> &BTreeMap<OsString, PathEntry> {
+    &self.head_diff
+  }
+}
+
+impl<'r> InnerStatus<'r> {
   pub fn new(repo: &'r Repository) -> Self {
     Self {
       repo,
       index: repo.index.borrow_mut(),
       untracked: BTreeMap::new(),
       stats: HashMap::new(),
-      head_diff: HashMap::new(),
+      head_diff: BTreeMap::new(),
       index_diff: BTreeMap::new(),
       workspace_diff: BTreeMap::new(),
     }
@@ -206,36 +257,6 @@ impl<'r> Status<'r> {
     }
 
     Ok(())
-  }
-
-  // accessors...it would be nice to provide something better than this.
-
-  pub fn untracked(&self) -> &BTreeMap<OsString, ChangeType> {
-    &self.untracked
-  }
-
-  pub fn has_untracked_changes(&self) -> bool {
-    self.untracked.len() > 0
-  }
-
-  pub fn index_diff(&self) -> &BTreeMap<OsString, ChangeType> {
-    &self.index_diff
-  }
-
-  pub fn has_index_changes(&self) -> bool {
-    self.index_diff.len() > 0
-  }
-
-  pub fn workspace_diff(&self) -> &BTreeMap<OsString, ChangeType> {
-    &self.workspace_diff
-  }
-
-  pub fn has_workspace_changes(&self) -> bool {
-    self.workspace_diff.len() > 0
-  }
-
-  pub fn head_diff(&self) -> &HashMap<OsString, PathEntry> {
-    &self.head_diff
   }
 }
 

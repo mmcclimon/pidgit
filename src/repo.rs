@@ -317,9 +317,7 @@ impl Repository {
   }
 
   pub fn status(&self) -> Result<Status> {
-    let mut status = Status::new(&self);
-    status.check()?;
-    Ok(status)
+    Status::generate(&self)
   }
 
   pub fn write_tree(&self, tree: &Tree) -> Result<()> {
