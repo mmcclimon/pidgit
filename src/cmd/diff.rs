@@ -8,11 +8,21 @@ use crate::index::Index;
 use crate::prelude::*;
 use crate::repo::{ChangeType, Status};
 
+const NULL_SHA: &str = "0000000000000000000000000000000000000000";
+const NULL_PATH: &str = "/dev/null";
+
 #[derive(Debug)]
 struct Diff<'r> {
   repo:   &'r Repository,
   status: Status,
   index:  Ref<'r, Index>,
+}
+
+#[derive(Debug)]
+struct DiffTarget {
+  path: PathBuf,
+  sha:  String,
+  mode: u32,
 }
 
 pub fn command() -> Command {
@@ -37,65 +47,127 @@ fn run(_matches: &ArgMatches, ctx: &Context) -> Result<()> {
 
   for (path, state) in cmd.status.workspace_diff().iter() {
     match state {
-      ChangeType::Modified => cmd.diff_file_modified(ctx, path)?,
+      ChangeType::Modified => cmd.diff_modified(ctx, path),
+      ChangeType::Deleted => cmd.diff_deleted(ctx, path),
       _ => println!("{:?}, {:?}", path, state),
     }
-    let _entry = cmd.index.entry_for(path).unwrap();
   }
 
   Ok(())
 }
 
 impl<'r> Diff<'r> {
-  fn diff_file_modified(&self, ctx: &Context, path: &OsString) -> Result<()> {
-    let a = self.index.entry_for(path).expect("missing index entry!");
-    let a_path = PathBuf::from("a").join(path);
-    let a_sha = &a.sha;
-    let a_mode = a.mode();
+  fn print_diff(&self, ctx: &Context, mut a: DiffTarget, mut b: DiffTarget) {
+    if a.sha == b.sha && a.mode == b.mode {
+      return;
+    }
 
-    use std::os::unix::fs::PermissionsExt;
-
-    let b = self.repo.workspace().read_blob(path)?;
-    let b_path = PathBuf::from("b").join(path);
-    let b_sha = &b.sha().hexdigest();
-    let b_mode = self
-      .status
-      .stat_for(path)
-      .expect("missing stat")
-      .permissions()
-      .mode();
+    a.path = a.with_prefix("a");
+    b.path = b.with_prefix("b");
 
     ctx.println(format!(
       "diff --git {} {}",
-      a_path.display(),
-      b_path.display()
+      a.path.display(),
+      b.path.display()
     ));
 
-    if a_mode != b_mode {
-      ctx.println(format!("old mode {:0o}", a_mode));
-      ctx.println(format!("new mode {:0o}", b_mode));
+    // mode
+    if b.is_null() {
+      ctx.println(format!("deleted file mode {:0o}", a.mode));
+    } else if a.mode != b.mode {
+      ctx.println(format!("old mode {:0o}", a.mode));
+      ctx.println(format!("new mode {:0o}", b.mode));
     }
 
-    if a_sha == b_sha {
-      return Ok(());
+    // content
+    if a.sha == b.sha {
+      return;
     }
 
-    let mode_str = if a_mode == b_mode {
-      format!(" {:0o}", a_mode)
+    let mode_str = if a.mode == b.mode {
+      format!(" {:0o}", a.mode)
     } else {
       "".to_string()
     };
 
     ctx.println(format!(
       "index {}..{}{}",
-      &a_sha[0..8],
-      &b_sha[0..8],
+      &a.sha[0..8],
+      &b.sha[0..8],
       mode_str,
     ));
 
-    ctx.println(format!("--- {}", a_path.display()));
-    ctx.println(format!("+++ {}", b_path.display()));
+    ctx.println(format!("--- {}", a.diff_path().display()));
+    ctx.println(format!("+++ {}", a.diff_path().display()));
+  }
 
-    Ok(())
+  fn target_from_index(&self, path: &OsString) -> DiffTarget {
+    let entry = self.index.entry_for(path).expect("missing index entry!");
+    DiffTarget::from(entry)
+  }
+
+  fn target_from_file(&self, path: &OsString) -> DiffTarget {
+    use std::os::unix::fs::PermissionsExt;
+
+    let blob = self
+      .repo
+      .workspace()
+      .read_blob(path)
+      .expect("could not create blob");
+    let stat = self.status.stat_for(path).expect("missing stat");
+
+    DiffTarget {
+      path: path.into(),
+      sha:  blob.sha().hexdigest(),
+      mode: stat.permissions().mode(),
+    }
+  }
+
+  fn diff_modified(&self, ctx: &Context, path: &OsString) {
+    let a = self.target_from_index(path);
+    let b = self.target_from_file(path);
+    self.print_diff(ctx, a, b);
+  }
+
+  fn diff_deleted(&self, ctx: &Context, path: &OsString) {
+    let a = self.target_from_index(path);
+    let b = DiffTarget::null(path);
+    self.print_diff(ctx, a, b);
+  }
+}
+
+impl From<&crate::index::IndexEntry> for DiffTarget {
+  fn from(entry: &crate::index::IndexEntry) -> Self {
+    Self {
+      path: entry.name.clone().into(),
+      sha:  entry.sha.clone(),
+      mode: entry.mode(),
+    }
+  }
+}
+
+impl DiffTarget {
+  fn null(path: &OsString) -> Self {
+    Self {
+      path: path.into(),
+      sha:  NULL_SHA.to_string(),
+      mode: 0,
+    }
+  }
+
+  fn with_prefix(&self, prefix: &str) -> PathBuf {
+    PathBuf::from(prefix).join(&self.path)
+  }
+
+  fn is_null(&self) -> bool {
+    self.mode == 0
+  }
+
+  fn diff_path(&self) -> PathBuf {
+    if self.is_null() {
+      NULL_PATH.into()
+    } else {
+      self.path.clone()
+    }
   }
 }
