@@ -8,12 +8,12 @@ use crate::prelude::*;
 use crate::repo::{ChangeType, Status};
 
 #[derive(Debug)]
-struct StatusCmd;
-
-struct StatusHelper(Status);
+struct StatusCmd {
+  status: Option<Status>,
+}
 
 pub fn new() -> Box<dyn Command> {
-  Box::new(StatusCmd {})
+  Box::new(StatusCmd { status: None })
 }
 
 impl Command for StatusCmd {
@@ -38,29 +38,37 @@ impl Command for StatusCmd {
     let repo = ctx.repo()?;
 
     let status = repo.status()?;
-    let helper = StatusHelper(status);
+    self.status = Some(status);
 
     // print!
     if matches.is_present("short") {
-      helper.print_short(ctx, true);
+      self.print_short(ctx, true);
     } else if matches.is_present("porcelain") {
-      helper.print_short(ctx, false);
+      self.print_short(ctx, false);
     } else {
-      helper.print_full(ctx);
+      self.print_full(ctx);
     }
 
     Ok(())
   }
 }
 
-impl StatusHelper {
+impl StatusCmd {
+  fn status(&self) -> &Status {
+    // safe to unwrap because we're calling it internally once we know it's set.
+    match self.status {
+      Some(ref s) => s,
+      None => panic!("tried to unwrap a None option"),
+    }
+  }
+
   fn status_for(&self, path: &OsString, use_color: bool) -> String {
-    let left = match self.0.index_diff().get(path) {
+    let left = match self.status().index_diff().get(path) {
       Some(ct) => ct.display(),
       None => " ",
     };
 
-    let right = match self.0.workspace_diff().get(path) {
+    let right = match self.status().workspace_diff().get(path) {
       Some(ct) => ct.display(),
       _ => " ",
     };
@@ -81,10 +89,10 @@ impl StatusHelper {
 
     let paths = BTreeSet::from_iter(
       self
-        .0
+        .status()
         .index_diff()
         .keys()
-        .chain(self.0.workspace_diff().keys()),
+        .chain(self.status().workspace_diff().keys()),
     );
 
     for path in paths {
@@ -95,7 +103,7 @@ impl StatusHelper {
       ));
     }
 
-    for spec in self.0.untracked().keys() {
+    for spec in self.status().untracked().keys() {
       ctx.println(format!("?? {}", PathBuf::from(spec).display()));
     }
   }
@@ -104,16 +112,21 @@ impl StatusHelper {
     self.print_changes(
       ctx,
       "Changes to be committed",
-      self.0.index_diff(),
+      self.status().index_diff(),
       Color::Green,
     );
     self.print_changes(
       ctx,
       "Changes not staged for commit",
-      self.0.workspace_diff(),
+      self.status().workspace_diff(),
       Color::Red,
     );
-    self.print_changes(ctx, "Untracked files", self.0.untracked(), Color::Red);
+    self.print_changes(
+      ctx,
+      "Untracked files",
+      self.status().untracked(),
+      Color::Red,
+    );
     self.print_commit_status(ctx);
   }
 
@@ -147,13 +160,13 @@ impl StatusHelper {
   }
 
   fn print_commit_status(&self, ctx: &Context) {
-    if self.0.has_index_changes() {
+    if self.status().has_index_changes() {
       return;
     }
 
-    if self.0.has_workspace_changes() {
+    if self.status().has_workspace_changes() {
       ctx.println("no changes added to commit".into())
-    } else if self.0.has_workspace_changes() {
+    } else if self.status().has_workspace_changes() {
       ctx.println("nothing added to commit but untracked files present".into())
     } else {
       ctx.println("nothing to commit, working tree clean".into())
