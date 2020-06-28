@@ -15,7 +15,13 @@ pub fn find_repo() -> Option<Repository> {
     let path = PathBuf::from(dir)
       .canonicalize()
       .expect("couldn't canonicalize PIDGIT_DIR");
-    return Repository::from_git_dir(&path).ok();
+    return Repository::from_git_dir(&path).map_or_else(
+      |err| {
+        eprintln!("{:?}", err);
+        None
+      },
+      |repo| Some(repo),
+    );
   }
 
   let pwd = std::env::current_dir();
