@@ -1,5 +1,5 @@
 use std::cell::RefMut;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fs::Metadata;
 use std::path::PathBuf;
@@ -13,7 +13,7 @@ use crate::prelude::*;
 struct InnerStatus<'r> {
   repo:           &'r Repository,
   index:          RefMut<'r, Index>,
-  stats:          HashMap<OsString, Metadata>,
+  stats:          BTreeMap<OsString, Metadata>,
   untracked:      BTreeMap<OsString, ChangeType>,
   index_diff:     BTreeMap<OsString, ChangeType>,
   workspace_diff: BTreeMap<OsString, ChangeType>,
@@ -22,6 +22,7 @@ struct InnerStatus<'r> {
 
 #[derive(Debug)]
 pub struct Status {
+  stats:          BTreeMap<OsString, Metadata>,
   untracked:      BTreeMap<OsString, ChangeType>,
   index_diff:     BTreeMap<OsString, ChangeType>,
   workspace_diff: BTreeMap<OsString, ChangeType>,
@@ -46,6 +47,7 @@ impl Status {
       index_diff:     helper.index_diff,
       workspace_diff: helper.workspace_diff,
       head_diff:      helper.head_diff,
+      stats:          helper.stats,
     })
   }
 
@@ -78,6 +80,10 @@ impl Status {
   pub fn head_diff(&self) -> &BTreeMap<OsString, PathEntry> {
     &self.head_diff
   }
+
+  pub fn stat_for(&self, key: &OsString) -> Option<&Metadata> {
+    self.stats.get(key)
+  }
 }
 
 impl<'r> InnerStatus<'r> {
@@ -86,7 +92,7 @@ impl<'r> InnerStatus<'r> {
       repo,
       index: repo.index.borrow_mut(),
       untracked: BTreeMap::new(),
-      stats: HashMap::new(),
+      stats: BTreeMap::new(),
       head_diff: BTreeMap::new(),
       index_diff: BTreeMap::new(),
       workspace_diff: BTreeMap::new(),

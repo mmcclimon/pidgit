@@ -11,7 +11,7 @@ use std::io::prelude::*;
 use std::path::{Path, PathBuf};
 
 use crate::index::Index;
-use crate::object::{Commit, Object, Person, Tree};
+use crate::object::{Blob, Commit, Object, Person, Tree};
 use crate::prelude::*;
 use crate::Lockfile;
 
@@ -478,5 +478,12 @@ impl Workspace {
 
   pub fn stat(&self, relpath: &PathBuf) -> Result<std::fs::Metadata> {
     Ok(self.canonicalize(relpath).metadata()?)
+  }
+
+  pub fn read_blob<P>(&self, relpath: &P) -> Result<Blob>
+  where
+    P: AsRef<Path>,
+  {
+    Blob::from_path(&self.canonicalize(relpath))
   }
 }

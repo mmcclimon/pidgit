@@ -401,6 +401,10 @@ impl Index {
   pub fn is_tracked_file(&self, key: &OsStr) -> bool {
     self.entries.contains_key(key)
   }
+
+  pub fn entry_for(&self, key: &OsStr) -> Option<&IndexEntry> {
+    self.entries.get(key)
+  }
 }
 
 impl IndexEntry {

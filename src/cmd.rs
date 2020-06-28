@@ -5,6 +5,7 @@ use std::{cell::RefCell, collections::BTreeMap, path::PathBuf};
 mod add;
 mod cat_file;
 mod commit;
+mod diff;
 mod dump_index;
 mod dump_tree;
 mod hash_object;
@@ -37,6 +38,7 @@ impl CommandSet {
     commands.insert("add", add::command());
     commands.insert("cat-file", cat_file::command());
     commands.insert("commit", commit::command());
+    commands.insert("diff", diff::command());
     commands.insert("dump-index", dump_index::command());
     commands.insert("dump-tree", dump_tree::command());
     commands.insert("hash-object", hash_object::command());
