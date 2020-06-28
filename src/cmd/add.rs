@@ -23,7 +23,7 @@ impl Command for Add {
     )
   }
 
-  fn run(&self, matches: &ArgMatches, ctx: &Context) -> Result<()> {
+  fn run(&mut self, matches: &ArgMatches, ctx: &Context) -> Result<()> {
     let repo = ctx.repo()?;
     let workspace = repo.workspace();
 

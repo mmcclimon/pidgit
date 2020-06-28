@@ -21,7 +21,7 @@ impl Command for RevParse {
       )
   }
 
-  fn run(&self, matches: &ArgMatches, ctx: &Context) -> Result<()> {
+  fn run(&mut self, matches: &ArgMatches, ctx: &Context) -> Result<()> {
     let repo = ctx.repo()?;
 
     let object = repo.resolve_object(matches.value_of("object").unwrap())?;

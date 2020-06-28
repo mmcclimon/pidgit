@@ -32,7 +32,7 @@ impl Command for HashObject {
       .arg(Arg::with_name("path").required(true).help("path to hash"))
   }
 
-  fn run(&self, matches: &ArgMatches, ctx: &Context) -> Result<()> {
+  fn run(&mut self, matches: &ArgMatches, ctx: &Context) -> Result<()> {
     let repo = ctx.repo();
 
     if repo.is_err() && matches.is_present("write") {

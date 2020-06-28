@@ -34,7 +34,7 @@ impl Command for StatusCmd {
       )
   }
 
-  fn run(&self, matches: &ArgMatches, ctx: &Context) -> Result<()> {
+  fn run(&mut self, matches: &ArgMatches, ctx: &Context) -> Result<()> {
     let repo = ctx.repo()?;
 
     let status = repo.status()?;

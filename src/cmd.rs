@@ -49,15 +49,18 @@ impl CommandSet {
     self.commands.values().map(|cmd| cmd.app())
   }
 
-  pub fn command_named<'a>(&'a self, name: &'a str) -> &'a Box<dyn Command> {
-    self.commands.get(&name).expect("command not found!")
+  pub fn command_named<'a>(
+    &'a mut self,
+    name: &'a str,
+  ) -> &'a mut Box<dyn Command> {
+    self.commands.get_mut(name).expect("command not found!")
   }
 }
 
 pub trait Command: std::fmt::Debug {
   fn app(&self) -> App;
 
-  fn run(&self, matches: &ArgMatches, ctx: &Context) -> Result<()>;
+  fn run(&mut self, matches: &ArgMatches, ctx: &Context) -> Result<()>;
 }
 
 impl<'w> Context<'w> {

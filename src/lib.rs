@@ -24,9 +24,7 @@ pub mod prelude {
   pub use ansi_term::Color;
 }
 
-// The actual app implementation. Basic usage:
-//   let app = pidgit::new();
-//   app.dispatch(&app.get_matches(), std::io::stdout())?;
+// The actual app implementation.
 
 use crate::cmd::{CommandSet, Context};
 use crate::errors::Result;
@@ -44,6 +42,19 @@ pub fn new() -> PidgitApp {
   }
 }
 
+// The standard run method, with real ARGV and repo finding from pwd.
+pub fn run_from_env() -> Result<()> {
+  let mut app = self::new();
+  let repo = util::find_repo();
+  let matches = app.clap_app().get_matches();
+  app.dispatch(
+    &matches,
+    repo.as_ref(),
+    std::io::stdout(),
+    std::env::current_dir().unwrap(),
+  )
+}
+
 impl PidgitApp {
   // we can't just stick this into a PidgitApp because get_matches() really
   // wants to consume the app.
@@ -57,12 +68,8 @@ impl PidgitApp {
       .subcommands(self.commands.apps())
   }
 
-  pub fn get_matches(&self) -> ArgMatches {
-    self.clap_app().get_matches()
-  }
-
   pub fn dispatch<W>(
-    &self,
+    &mut self,
     app_matches: &ArgMatches,
     repo: Option<&Repository>,
     writer: W,

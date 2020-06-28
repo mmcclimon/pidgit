@@ -33,7 +33,7 @@ pub fn new_empty_repo() -> TestRepo {
 
 impl TestRepo {
   pub fn run_pidgit(&self, args: Vec<&str>) -> Result<String> {
-    let app = pidgit::new();
+    let mut app = pidgit::new();
     let mut stdout = Cursor::new(vec![]);
 
     let full_args = std::iter::once("pidgit").chain(args);

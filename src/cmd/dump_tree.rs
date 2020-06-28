@@ -23,7 +23,7 @@ impl Command for DumpTree {
       )
   }
 
-  fn run(&self, matches: &ArgMatches, ctx: &Context) -> Result<()> {
+  fn run(&mut self, matches: &ArgMatches, ctx: &Context) -> Result<()> {
     let repo = ctx.repo()?;
 
     let to_find = matches.value_of("commit").unwrap();

@@ -17,7 +17,7 @@ impl Command for LsFiles {
     App::new("ls-files").about("list all the files in the tree")
   }
 
-  fn run(&self, _matches: &ArgMatches, ctx: &Context) -> Result<()> {
+  fn run(&mut self, _matches: &ArgMatches, ctx: &Context) -> Result<()> {
     for key in ctx.repo()?.index().keys() {
       ctx.println(format!("{}", PathBuf::from(key).display()));
     }

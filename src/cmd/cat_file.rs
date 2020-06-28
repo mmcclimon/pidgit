@@ -46,7 +46,7 @@ impl Command for CatFile {
       )
   }
 
-  fn run(&self, m: &ArgMatches, ctx: &Context) -> Result<()> {
+  fn run(&mut self, m: &ArgMatches, ctx: &Context) -> Result<()> {
     let repo = ctx.repo()?;
 
     let object = repo.resolve_object(m.value_of("object").unwrap())?;

@@ -15,7 +15,7 @@ impl Command for Init {
     App::new("init").about("initialize a pidgit directory")
   }
 
-  fn run(&self, _matches: &ArgMatches, ctx: &Context) -> Result<()> {
+  fn run(&mut self, _matches: &ArgMatches, ctx: &Context) -> Result<()> {
     if let Ok(repo) = ctx.repo() {
       // maybe later: die if we can't initialize a repo from it
       ctx.println(format!(
@@ -77,7 +77,7 @@ mod tests {
 
     // this is silly, but this test is also like, the only place we need to run
     // outside of a repository
-    let app = pidgit::new();
+    let mut app = pidgit::new();
     let mut stdout = Cursor::new(vec![]);
     let matches = app.clap_app().get_matches_from_safe(&["pidgit", "init"])?;
 

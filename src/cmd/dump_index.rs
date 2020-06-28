@@ -15,7 +15,7 @@ impl Command for DumpIndex {
     App::new("dump-index").about("dump the index file (just for debugging)")
   }
 
-  fn run(&self, _matches: &ArgMatches, ctx: &Context) -> Result<()> {
+  fn run(&mut self, _matches: &ArgMatches, ctx: &Context) -> Result<()> {
     let repo = ctx.repo()?;
     let index = repo.index();
 
