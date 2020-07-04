@@ -1,4 +1,4 @@
-use clap::{App, ArgMatches};
+use clap::{App, Arg, ArgMatches};
 use std::cell::Ref;
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -32,9 +32,15 @@ pub fn command() -> Command {
 pub fn app() -> ClapApp {
   App::new("diff")
     .about("show changes between commits, commit and working tree, etc.")
+    .arg(
+      Arg::with_name("cached")
+        .long("cached")
+        .alias("staged")
+        .help("view staged changes"),
+    )
 }
 
-fn run(_matches: &ArgMatches, ctx: &Context) -> Result<()> {
+fn run(matches: &ArgMatches, ctx: &Context) -> Result<()> {
   let repo = ctx.repo()?;
   let status = repo.status()?;
   let index = repo.index();
@@ -45,20 +51,40 @@ fn run(_matches: &ArgMatches, ctx: &Context) -> Result<()> {
     index,
   };
 
-  for (path, state) in cmd.status.workspace_diff().iter() {
-    match state {
-      ChangeType::Modified => cmd.diff_modified(ctx, path),
-      ChangeType::Deleted => cmd.diff_deleted(ctx, path),
-      _ => println!("{:?}, {:?}", path, state),
-    }
+  if matches.is_present("cached") {
+    cmd.print_index_diff(ctx);
+  } else {
+    cmd.print_workspace_diff(ctx);
   }
 
   Ok(())
 }
 
 impl<'r> Diff<'r> {
+  fn print_workspace_diff(&self, ctx: &Context) {
+    for (path, state) in self.status.workspace_diff().iter() {
+      match state {
+        ChangeType::Modified => self.diff_modified(ctx, path),
+        ChangeType::Deleted => self.diff_deleted(ctx, path),
+        _ => println!("{:?}, {:?}", path, state),
+      }
+    }
+  }
+
+  fn print_index_diff(&self, ctx: &Context) {
+    for (path, state) in self.status.index_diff().iter() {
+      match state {
+        ChangeType::Modified => self.idx_diff_modified(ctx, path),
+        ChangeType::Deleted => self.idx_diff_deleted(ctx, path),
+        _ => println!("{:?}, {:?}", path, state),
+      }
+    }
+  }
+
   fn print_diff(&self, ctx: &Context, mut a: DiffTarget, mut b: DiffTarget) {
+    println!("print diff");
     if a.sha == b.sha && a.mode == b.mode {
+      println!("shas and modes match");
       return;
     }
 
@@ -106,6 +132,15 @@ impl<'r> Diff<'r> {
     DiffTarget::from(entry)
   }
 
+  fn target_from_head(&self, path: &OsString) -> DiffTarget {
+    let entry = self
+      .status
+      .head_diff()
+      .get(path)
+      .expect("missing index entry!");
+    DiffTarget::from(entry)
+  }
+
   fn target_from_file(&self, path: &OsString) -> DiffTarget {
     use std::os::unix::fs::PermissionsExt;
 
@@ -123,9 +158,21 @@ impl<'r> Diff<'r> {
     }
   }
 
+  fn idx_diff_modified(&self, ctx: &Context, path: &OsString) {
+    let a = self.target_from_head(path);
+    let b = self.target_from_index(path);
+    self.print_diff(ctx, a, b);
+  }
+
   fn diff_modified(&self, ctx: &Context, path: &OsString) {
     let a = self.target_from_index(path);
     let b = self.target_from_file(path);
+    self.print_diff(ctx, a, b);
+  }
+
+  fn idx_diff_deleted(&self, ctx: &Context, path: &OsString) {
+    let a = self.target_from_head(path);
+    let b = DiffTarget::null(path);
     self.print_diff(ctx, a, b);
   }
 
@@ -142,6 +189,19 @@ impl From<&crate::index::IndexEntry> for DiffTarget {
       path: entry.name.clone().into(),
       sha:  entry.sha.clone(),
       mode: entry.mode(),
+    }
+  }
+}
+
+// path: PathBuf,
+// mode: Mode,
+// sha:  String,
+impl From<&crate::object::PathEntry> for DiffTarget {
+  fn from(entry: &crate::object::PathEntry) -> Self {
+    Self {
+      path: entry.path.clone(),
+      sha:  entry.sha.clone(),
+      mode: entry.mode().into(),
     }
   }
 }

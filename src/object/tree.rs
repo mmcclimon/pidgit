@@ -29,9 +29,9 @@ pub enum TreeItem {
 // out the lifetimes.
 #[derive(Debug, Clone)]
 pub struct PathEntry {
-  path: PathBuf,
-  mode: Mode,
-  sha:  String,
+  pub path: PathBuf,
+  pub mode: Mode,
+  pub sha:  String,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -387,6 +387,16 @@ impl From<u32> for Mode {
       "100644" => Self::Normal,
       "100755" => Self::Executable,
       _ => panic!("unknown mode {:?}", mode_str),
+    }
+  }
+}
+
+impl From<&Mode> for u32 {
+  fn from(mode: &Mode) -> u32 {
+    match mode {
+      Mode::Tree => 0o040000,
+      Mode::Normal => 0o100644,
+      Mode::Executable => 0o100644,
     }
   }
 }
