@@ -39,4 +39,8 @@ impl Blob {
     reader.read_to_end(&mut content)?;
     Ok(Self::from_content(content))
   }
+
+  pub fn string_content(&self) -> String {
+    String::from_utf8(self.content.clone()).expect("invalid utf8")
+  }
 }

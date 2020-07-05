@@ -11,10 +11,10 @@ enum DiffType {
 struct Trace(usize, usize, usize, usize);
 
 #[derive(Debug)]
-struct Edit<'d>(DiffType, &'d str);
+pub struct Edit<'d>(DiffType, &'d str);
 
 #[derive(Debug)]
-struct Myers {
+pub struct Myers {
   a: WrappingVec<String>,
   b: WrappingVec<String>,
 }
@@ -60,7 +60,7 @@ impl<'d> std::fmt::Display for Edit<'d> {
 
 #[allow(unused)]
 impl Myers {
-  fn new(a: String, b: String) -> Self {
+  pub fn new(a: String, b: String) -> Self {
     Self {
       a: a.lines().map(|s| s.to_string()).collect::<Vec<_>>().into(),
       b: b.lines().map(|s| s.to_string()).collect::<Vec<_>>().into(),
@@ -167,7 +167,7 @@ mod tests {
   use super::*;
 
   #[test]
-  fn junk() {
+  fn basic() {
     // this isn't really a test, but is useful for playing around
     let a = "ABCABBA".split("").skip(1).collect::<Vec<_>>().join("\n");
     let b = "CBABAC".split("").skip(1).collect::<Vec<_>>().join("\n");

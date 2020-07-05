@@ -4,6 +4,7 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 
 use crate::cmd::Context;
+use crate::diff::Myers;
 use crate::index::Index;
 use crate::prelude::*;
 use crate::repo::{ChangeType, Status};
@@ -20,9 +21,10 @@ struct Diff<'r> {
 
 #[derive(Debug)]
 struct DiffTarget {
-  path: PathBuf,
-  sha:  String,
-  mode: u32,
+  path:    PathBuf,
+  sha:     String,
+  mode:    u32,
+  content: String,
 }
 
 pub fn command() -> Command {
@@ -64,8 +66,20 @@ impl<'r> Diff<'r> {
   fn print_workspace_diff(&self, ctx: &Context) {
     for (path, state) in self.status.workspace_diff().iter() {
       match state {
-        ChangeType::Modified => self.diff_modified(ctx, path),
-        ChangeType::Deleted => self.diff_deleted(ctx, path),
+        ChangeType::Modified => {
+          self.print_diff(
+            ctx,
+            self.target_from_index(path),
+            self.target_from_file(path),
+          );
+        },
+        ChangeType::Deleted => {
+          self.print_diff(
+            ctx,
+            self.target_from_index(path),
+            DiffTarget::null(path),
+          );
+        },
         _ => println!("{:?}, {:?}", path, state),
       }
     }
@@ -74,17 +88,27 @@ impl<'r> Diff<'r> {
   fn print_index_diff(&self, ctx: &Context) {
     for (path, state) in self.status.index_diff().iter() {
       match state {
-        ChangeType::Modified => self.idx_diff_modified(ctx, path),
-        ChangeType::Deleted => self.idx_diff_deleted(ctx, path),
+        ChangeType::Modified => {
+          self.print_diff(
+            ctx,
+            self.target_from_head(path),
+            self.target_from_index(path),
+          );
+        },
+        ChangeType::Deleted => {
+          self.print_diff(
+            ctx,
+            self.target_from_head(path),
+            DiffTarget::null(path),
+          );
+        },
         _ => println!("{:?}, {:?}", path, state),
       }
     }
   }
 
   fn print_diff(&self, ctx: &Context, mut a: DiffTarget, mut b: DiffTarget) {
-    println!("print diff");
     if a.sha == b.sha && a.mode == b.mode {
-      println!("shas and modes match");
       return;
     }
 
@@ -125,11 +149,28 @@ impl<'r> Diff<'r> {
 
     ctx.println(format!("--- {}", a.diff_path().display()));
     ctx.println(format!("+++ {}", a.diff_path().display()));
+
+    let differ = Myers::new(a.content, b.content);
+    for line in differ.diff() {
+      ctx.println(format!("{}", line));
+    }
   }
 
   fn target_from_index(&self, path: &OsString) -> DiffTarget {
     let entry = self.index.entry_for(path).expect("missing index entry!");
-    DiffTarget::from(entry)
+    let blob = self
+      .repo
+      .object_for_sha(&entry.sha)
+      .expect("no blob?")
+      .as_blob()
+      .expect("bad blob object?");
+
+    DiffTarget {
+      path:    entry.name.clone().into(),
+      sha:     entry.sha.clone(),
+      mode:    entry.mode(),
+      content: blob.string_content(),
+    }
   }
 
   fn target_from_head(&self, path: &OsString) -> DiffTarget {
@@ -138,7 +179,20 @@ impl<'r> Diff<'r> {
       .head_diff()
       .get(path)
       .expect("missing index entry!");
-    DiffTarget::from(entry)
+
+    let blob = self
+      .repo
+      .object_for_sha(&entry.sha)
+      .expect("no blob?")
+      .as_blob()
+      .expect("bad blob object?");
+
+    DiffTarget {
+      path:    entry.path.clone(),
+      sha:     entry.sha.clone(),
+      mode:    entry.mode().into(),
+      content: blob.string_content(),
+    }
   }
 
   fn target_from_file(&self, path: &OsString) -> DiffTarget {
@@ -151,57 +205,12 @@ impl<'r> Diff<'r> {
       .expect("could not create blob");
     let stat = self.status.stat_for(path).expect("missing stat");
 
+    // TODO: diff non-strings?
     DiffTarget {
-      path: path.into(),
-      sha:  blob.sha().hexdigest(),
-      mode: stat.permissions().mode(),
-    }
-  }
-
-  fn idx_diff_modified(&self, ctx: &Context, path: &OsString) {
-    let a = self.target_from_head(path);
-    let b = self.target_from_index(path);
-    self.print_diff(ctx, a, b);
-  }
-
-  fn diff_modified(&self, ctx: &Context, path: &OsString) {
-    let a = self.target_from_index(path);
-    let b = self.target_from_file(path);
-    self.print_diff(ctx, a, b);
-  }
-
-  fn idx_diff_deleted(&self, ctx: &Context, path: &OsString) {
-    let a = self.target_from_head(path);
-    let b = DiffTarget::null(path);
-    self.print_diff(ctx, a, b);
-  }
-
-  fn diff_deleted(&self, ctx: &Context, path: &OsString) {
-    let a = self.target_from_index(path);
-    let b = DiffTarget::null(path);
-    self.print_diff(ctx, a, b);
-  }
-}
-
-impl From<&crate::index::IndexEntry> for DiffTarget {
-  fn from(entry: &crate::index::IndexEntry) -> Self {
-    Self {
-      path: entry.name.clone().into(),
-      sha:  entry.sha.clone(),
-      mode: entry.mode(),
-    }
-  }
-}
-
-// path: PathBuf,
-// mode: Mode,
-// sha:  String,
-impl From<&crate::object::PathEntry> for DiffTarget {
-  fn from(entry: &crate::object::PathEntry) -> Self {
-    Self {
-      path: entry.path.clone(),
-      sha:  entry.sha.clone(),
-      mode: entry.mode().into(),
+      path:    path.into(),
+      sha:     blob.sha().hexdigest(),
+      mode:    stat.permissions().mode(),
+      content: blob.string_content(),
     }
   }
 }
@@ -209,9 +218,10 @@ impl From<&crate::object::PathEntry> for DiffTarget {
 impl DiffTarget {
   fn null(path: &OsString) -> Self {
     Self {
-      path: path.into(),
-      sha:  NULL_SHA.to_string(),
-      mode: 0,
+      path:    path.into(),
+      sha:     NULL_SHA.to_string(),
+      mode:    0,
+      content: "".to_string(),
     }
   }
 
