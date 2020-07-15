@@ -1,4 +1,5 @@
 use crate::util::WrappingVec;
+use std::default::Default;
 
 #[derive(Debug)]
 enum DiffType {
@@ -10,13 +11,22 @@ enum DiffType {
 #[derive(Debug)]
 struct Trace(usize, usize, usize, usize);
 
+#[derive(Debug, Clone)]
+struct Line(usize, String);
+
 #[derive(Debug)]
-pub struct Edit<'d>(DiffType, &'d str);
+pub struct Edit<'d>(DiffType, Option<&'d Line>, Option<&'d Line>);
 
 #[derive(Debug)]
 pub struct Myers {
-  a: WrappingVec<String>,
-  b: WrappingVec<String>,
+  a: WrappingVec<Line>,
+  b: WrappingVec<Line>,
+}
+
+impl Default for Line {
+  fn default() -> Self {
+    Line(0, "".into())
+  }
 }
 
 #[rustfmt::skip]
@@ -52,9 +62,22 @@ impl std::fmt::Display for DiffType {
   }
 }
 
+impl std::fmt::Display for Line {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(f, "{}", self.1)
+  }
+}
+
 impl<'d> std::fmt::Display for Edit<'d> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    write!(f, "{}{}", self.0, self.1)
+    let text = if let Some(t) = self.1 {
+      t
+    } else if let Some(t) = self.2 {
+      t
+    } else {
+      panic!("nonsensical edit")
+    };
+    write!(f, "{}{}", self.0, text)
   }
 }
 
@@ -62,8 +85,18 @@ impl<'d> std::fmt::Display for Edit<'d> {
 impl Myers {
   pub fn new(a: String, b: String) -> Self {
     Self {
-      a: a.lines().map(|s| s.to_string()).collect::<Vec<_>>().into(),
-      b: b.lines().map(|s| s.to_string()).collect::<Vec<_>>().into(),
+      a: a
+        .lines()
+        .enumerate()
+        .map(|(n, s)| Line(n + 1, s.to_string()))
+        .collect::<Vec<_>>()
+        .into(),
+      b: b
+        .lines()
+        .enumerate()
+        .map(|(n, s)| Line(n + 1, s.to_string()))
+        .collect::<Vec<_>>()
+        .into(),
     }
   }
 
@@ -74,11 +107,15 @@ impl Myers {
       let b_line = &self.b.get(trace.prev_y());
 
       if trace.x() == trace.prev_x() {
-        diff.push(Edit(DiffType::Ins, b_line.unwrap()))
+        diff.push(Edit(DiffType::Ins, None, Some(b_line.unwrap())))
       } else if trace.y() == trace.prev_y() {
-        diff.push(Edit(DiffType::Del, a_line.unwrap()))
+        diff.push(Edit(DiffType::Del, Some(a_line.unwrap()), None))
       } else {
-        diff.push(Edit(DiffType::Eql, a_line.unwrap()))
+        diff.push(Edit(
+          DiffType::Eql,
+          Some(a_line.unwrap()),
+          Some(b_line.unwrap()),
+        ))
       }
     }
 
@@ -108,7 +145,7 @@ impl Myers {
 
         let mut y = x - k;
 
-        while x < n && y < m && self.a[x] == self.b[y] {
+        while x < n && y < m && self.a[x].1 == self.b[y].1 {
           x += 1;
           y += 1;
         }
