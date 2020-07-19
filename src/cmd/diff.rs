@@ -1,3 +1,4 @@
+use ansi_term::Style;
 use clap::{App, Arg, ArgMatches};
 use std::cell::Ref;
 use std::ffi::OsString;
@@ -115,22 +116,23 @@ impl<'r> DiffCmd<'r> {
     a.path = a.with_prefix("a");
     b.path = b.with_prefix("b");
 
-    ctx.println(format!(
-      "diff --git {} {}",
-      a.path.display(),
-      b.path.display()
-    ));
+    ctx.println_color(
+      format!("diff --git {} {}", a.path.display(), b.path.display()),
+      Style::new().bold(),
+    );
 
     self.print_diff_mode(ctx, &a, &b);
     self.print_diff_content(ctx, a, b);
   }
 
   fn print_diff_mode(&self, ctx: &Context, a: &DiffTarget, b: &DiffTarget) {
+    let bold = Style::new().bold();
+
     if b.is_null() {
-      ctx.println(format!("deleted file mode {:0o}", a.mode));
+      ctx.println_color(format!("deleted file mode {:0o}", a.mode), bold);
     } else if a.mode != b.mode {
-      ctx.println(format!("old mode {:0o}", a.mode));
-      ctx.println(format!("new mode {:0o}", b.mode));
+      ctx.println_color(format!("old mode {:0o}", a.mode), bold);
+      ctx.println_color(format!("new mode {:0o}", b.mode), bold);
     }
   }
 
@@ -145,19 +147,19 @@ impl<'r> DiffCmd<'r> {
       "".to_string()
     };
 
-    ctx.println(format!(
-      "index {}..{}{}",
-      &a.sha[0..8],
-      &b.sha[0..8],
-      mode_str,
-    ));
+    let bold = Style::new().bold();
 
-    ctx.println(format!("--- {}", a.diff_path().display()));
-    ctx.println(format!("+++ {}", a.diff_path().display()));
+    ctx.println_color(
+      format!("index {}..{}{}", &a.sha[0..8], &b.sha[0..8], mode_str),
+      bold,
+    );
+
+    ctx.println_color(format!("--- {}", a.diff_path().display()), bold);
+    ctx.println_color(format!("+++ {}", a.diff_path().display()), bold);
 
     let hunks = diff::diff_hunks(a.content, b.content);
     for hunk in hunks {
-      ctx.println(hunk.header());
+      ctx.println_color(hunk.header(), Color::Cyan.normal());
 
       for edit in hunk.edits {
         ctx.println(format!("{}", edit))

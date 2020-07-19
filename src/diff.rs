@@ -1,4 +1,4 @@
-use crate::util::WrappingVec;
+use crate::util::{colored, WrappingVec};
 use std::default::Default;
 
 const HUNK_CONTEXT: isize = 3;
@@ -88,6 +88,8 @@ impl std::fmt::Display for Line {
 
 impl std::fmt::Display for Edit {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    use ansi_term::{Color, Style};
+
     let text = if self.a.is_some() {
       self.a.as_ref()
     } else if self.b.is_some() {
@@ -95,7 +97,15 @@ impl std::fmt::Display for Edit {
     } else {
       panic!("nonsensical edit")
     };
-    write!(f, "{}{}", self.kind, text.unwrap())
+
+    let s = match self.kind {
+      DiffType::Eql => Style::new(),
+      DiffType::Ins => Color::Green.normal(),
+      DiffType::Del => Color::Red.normal(),
+    };
+
+    let line = format!("{}{}", self.kind, text.unwrap());
+    write!(f, "{}", colored(&line, s))
   }
 }
 
