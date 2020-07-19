@@ -121,15 +121,20 @@ impl<'r> Diff<'r> {
       b.path.display()
     ));
 
-    // mode
+    self.print_diff_mode(ctx, &a, &b);
+    self.print_diff_content(ctx, a, b);
+  }
+
+  fn print_diff_mode(&self, ctx: &Context, a: &DiffTarget, b: &DiffTarget) {
     if b.is_null() {
       ctx.println(format!("deleted file mode {:0o}", a.mode));
     } else if a.mode != b.mode {
       ctx.println(format!("old mode {:0o}", a.mode));
       ctx.println(format!("new mode {:0o}", b.mode));
     }
+  }
 
-    // content
+  fn print_diff_content(&self, ctx: &Context, a: DiffTarget, b: DiffTarget) {
     if a.sha == b.sha {
       return;
     }
