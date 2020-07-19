@@ -82,8 +82,8 @@ impl<'w> Context<'w> {
     writeln!(self.writer.borrow_mut(), "{}", out).unwrap();
   }
 
-  pub fn println_color(&self, out: String, color: Color) {
-    writeln!(self.writer.borrow_mut(), "{}", util::colored(&out, color)).unwrap();
+  pub fn println_color(&self, out: String, style: ansi_term::Style) {
+    writeln!(self.writer.borrow_mut(), "{}", util::colored(&out, style)).unwrap();
   }
 
   pub fn println_raw(&self, out: &[u8]) -> Result<()> {

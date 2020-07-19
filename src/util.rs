@@ -2,7 +2,7 @@ mod wrapping_vec;
 
 pub use wrapping_vec::WrappingVec;
 
-use ansi_term::{ANSIGenericString, Color, Style};
+use ansi_term::{ANSIGenericString, Style};
 use sha1::Sha1;
 use std::fs::Metadata;
 use std::path::{Path, PathBuf};
@@ -95,9 +95,9 @@ fn should_color() -> bool {
   atty::is(Stream::Stdout)
 }
 
-pub fn colored(s: &str, color: Color) -> ANSIGenericString<str> {
+pub fn colored(s: &str, style: Style) -> ANSIGenericString<str> {
   if should_color() {
-    color.paint(s)
+    style.paint(s)
   } else {
     Style::new().paint(s)
   }

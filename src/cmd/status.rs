@@ -65,8 +65,8 @@ impl StatusCmd {
     if use_color {
       format!(
         "{}{}",
-        util::colored(left, Color::Green),
-        util::colored(right, Color::Red)
+        util::colored(left, Color::Green.normal()),
+        util::colored(right, Color::Red.normal())
       )
     } else {
       format!("{}{}", left, right)
@@ -141,7 +141,7 @@ impl StatusCmd {
 
       ctx.println_color(
         format!("\t{}{}", status, PathBuf::from(path).display()),
-        color,
+        color.normal(),
       );
     }
 
