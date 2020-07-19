@@ -4,7 +4,7 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 
 use crate::cmd::Context;
-use crate::diff::Myers;
+use crate::diff;
 use crate::index::Index;
 use crate::prelude::*;
 use crate::repo::{ChangeType, Status};
@@ -155,9 +155,13 @@ impl<'r> DiffCmd<'r> {
     ctx.println(format!("--- {}", a.diff_path().display()));
     ctx.println(format!("+++ {}", a.diff_path().display()));
 
-    let differ = Myers::new(a.content, b.content);
-    for line in differ.diff() {
-      ctx.println(format!("{}", line));
+    let hunks = diff::diff_hunks(a.content, b.content);
+    for hunk in hunks {
+      ctx.println(hunk.header());
+
+      for edit in hunk.edits {
+        ctx.println(format!("{}", edit))
+      }
     }
   }
 

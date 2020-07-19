@@ -1,7 +1,9 @@
 use crate::util::WrappingVec;
 use std::default::Default;
 
-#[derive(Debug)]
+const HUNK_CONTEXT: isize = 3;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum DiffType {
   Ins,
   Del,
@@ -14,8 +16,15 @@ struct Trace(usize, usize, usize, usize);
 #[derive(Debug, Clone)]
 struct Line(usize, String);
 
+#[derive(Debug, Clone)]
+pub struct Edit(DiffType, Option<Line>, Option<Line>);
+
 #[derive(Debug)]
-pub struct Edit<'d>(DiffType, Option<&'d Line>, Option<&'d Line>);
+pub struct DiffHunk {
+  a_start:   usize,
+  b_start:   usize,
+  pub edits: Vec<Edit>,
+}
 
 #[derive(Debug)]
 pub struct Myers {
@@ -27,6 +36,11 @@ impl Default for Line {
   fn default() -> Self {
     Line(0, "".into())
   }
+}
+
+pub fn diff_hunks(a: String, b: String) -> Vec<DiffHunk> {
+  let differ = Myers::new(a, b);
+  DiffHunk::filter(differ.diff())
 }
 
 #[rustfmt::skip]
@@ -68,20 +82,19 @@ impl std::fmt::Display for Line {
   }
 }
 
-impl<'d> std::fmt::Display for Edit<'d> {
+impl std::fmt::Display for Edit {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    let text = if let Some(t) = self.1 {
-      t
-    } else if let Some(t) = self.2 {
-      t
+    let text = if self.1.is_some() {
+      self.1.as_ref()
+    } else if self.2.is_some() {
+      self.2.as_ref()
     } else {
       panic!("nonsensical edit")
     };
-    write!(f, "{}{}", self.0, text)
+    write!(f, "{}{}", self.0, text.unwrap())
   }
 }
 
-#[allow(unused)]
 impl Myers {
   pub fn new(a: String, b: String) -> Self {
     Self {
@@ -107,14 +120,14 @@ impl Myers {
       let b_line = &self.b.get(trace.prev_y());
 
       if trace.x() == trace.prev_x() {
-        diff.push(Edit(DiffType::Ins, None, Some(b_line.unwrap())))
+        diff.push(Edit(DiffType::Ins, None, Some(b_line.unwrap().clone())))
       } else if trace.y() == trace.prev_y() {
-        diff.push(Edit(DiffType::Del, Some(a_line.unwrap()), None))
+        diff.push(Edit(DiffType::Del, Some(a_line.unwrap().clone()), None))
       } else {
         diff.push(Edit(
           DiffType::Eql,
-          Some(a_line.unwrap()),
-          Some(b_line.unwrap()),
+          Some(a_line.unwrap().clone()),
+          Some(b_line.unwrap().clone()),
         ))
       }
     }
@@ -196,6 +209,96 @@ impl Myers {
     }
 
     ret
+  }
+}
+
+impl DiffHunk {
+  pub fn filter(diff: Vec<Edit>) -> Vec<Self> {
+    let mut hunks = vec![];
+    let mut offset: isize = 0;
+
+    loop {
+      while offset < diff.len() as isize
+        && diff[offset as usize].0 == DiffType::Eql
+      {
+        offset += 1;
+      }
+
+      if offset >= diff.len() as isize {
+        return hunks;
+      }
+
+      offset -= HUNK_CONTEXT + 1;
+
+      let a_start = if offset < 0 {
+        0
+      } else {
+        diff[offset as usize].1.as_ref().unwrap().0
+      };
+
+      let b_start = if offset < 0 {
+        0
+      } else {
+        diff[offset as usize].2.as_ref().unwrap().0
+      };
+
+      let mut hunk = DiffHunk {
+        a_start,
+        b_start,
+        edits: vec![],
+      };
+
+      offset = hunk.build(&diff, offset);
+
+      hunks.push(hunk);
+    }
+  }
+
+  fn build(&mut self, diff: &Vec<Edit>, mut offset: isize) -> isize {
+    let mut counter = -1;
+
+    while counter != 0 {
+      if offset >= 0 && counter > 0 {
+        self.edits.push(diff[offset as usize].clone());
+      }
+
+      offset += 1;
+      if offset > diff.len() as isize {
+        break;
+      }
+
+      let idx = offset + HUNK_CONTEXT;
+      if idx >= diff.len() as isize {
+        counter -= 1;
+        continue;
+      }
+
+      match diff[idx as usize].0 {
+        DiffType::Eql => counter -= 1,
+        _ => counter = 2 * HUNK_CONTEXT + 1,
+      }
+    }
+
+    offset
+  }
+
+  pub fn header(&self) -> String {
+    let a_offset = self.offsets_for(|e| e.1.as_ref(), self.a_start);
+    let b_offset = self.offsets_for(|e| e.2.as_ref(), self.b_start);
+
+    format!(
+      "@@ -{},{} +{},{} @@",
+      a_offset.0, a_offset.1, b_offset.0, b_offset.1
+    )
+  }
+
+  fn offsets_for<F>(&self, getter: F, default: usize) -> (usize, usize)
+  where
+    F: FnMut(&Edit) -> Option<&Line>,
+  {
+    let lines = self.edits.iter().filter_map(getter).collect::<Vec<_>>();
+    let start = if lines.len() > 0 { lines[0].0 } else { default };
+    (start, lines.len())
   }
 }
 
