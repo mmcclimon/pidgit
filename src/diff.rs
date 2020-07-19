@@ -17,7 +17,11 @@ struct Trace(usize, usize, usize, usize);
 struct Line(usize, String);
 
 #[derive(Debug, Clone)]
-pub struct Edit(DiffType, Option<Line>, Option<Line>);
+pub struct Edit {
+  kind: DiffType,
+  a:    Option<Line>,
+  b:    Option<Line>,
+}
 
 #[derive(Debug)]
 pub struct DiffHunk {
@@ -84,14 +88,14 @@ impl std::fmt::Display for Line {
 
 impl std::fmt::Display for Edit {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    let text = if self.1.is_some() {
-      self.1.as_ref()
-    } else if self.2.is_some() {
-      self.2.as_ref()
+    let text = if self.a.is_some() {
+      self.a.as_ref()
+    } else if self.b.is_some() {
+      self.b.as_ref()
     } else {
       panic!("nonsensical edit")
     };
-    write!(f, "{}{}", self.0, text.unwrap())
+    write!(f, "{}{}", self.kind, text.unwrap())
   }
 }
 
@@ -120,11 +124,19 @@ impl Myers {
       let b_line = &self.b.get(trace.prev_y());
 
       if trace.x() == trace.prev_x() {
-        diff.push(Edit(DiffType::Ins, None, Some(b_line.unwrap().clone())))
+        diff.push(Edit::new(
+          DiffType::Ins,
+          None,
+          Some(b_line.unwrap().clone()),
+        ))
       } else if trace.y() == trace.prev_y() {
-        diff.push(Edit(DiffType::Del, Some(a_line.unwrap().clone()), None))
+        diff.push(Edit::new(
+          DiffType::Del,
+          Some(a_line.unwrap().clone()),
+          None,
+        ))
       } else {
-        diff.push(Edit(
+        diff.push(Edit::new(
           DiffType::Eql,
           Some(a_line.unwrap().clone()),
           Some(b_line.unwrap().clone()),
@@ -219,7 +231,7 @@ impl DiffHunk {
 
     loop {
       while offset < diff.len() as isize
-        && diff[offset as usize].0 == DiffType::Eql
+        && diff[offset as usize].kind == DiffType::Eql
       {
         offset += 1;
       }
@@ -233,13 +245,13 @@ impl DiffHunk {
       let a_start = if offset < 0 {
         0
       } else {
-        diff[offset as usize].1.as_ref().unwrap().0
+        diff[offset as usize].a.as_ref().unwrap().number()
       };
 
       let b_start = if offset < 0 {
         0
       } else {
-        diff[offset as usize].2.as_ref().unwrap().0
+        diff[offset as usize].b.as_ref().unwrap().number()
       };
 
       let mut hunk = DiffHunk {
@@ -273,7 +285,7 @@ impl DiffHunk {
         continue;
       }
 
-      match diff[idx as usize].0 {
+      match diff[idx as usize].kind {
         DiffType::Eql => counter -= 1,
         _ => counter = 2 * HUNK_CONTEXT + 1,
       }
@@ -283,8 +295,8 @@ impl DiffHunk {
   }
 
   pub fn header(&self) -> String {
-    let a_offset = self.offsets_for(|e| e.1.as_ref(), self.a_start);
-    let b_offset = self.offsets_for(|e| e.2.as_ref(), self.b_start);
+    let a_offset = self.offsets_for(|e| e.a.as_ref(), self.a_start);
+    let b_offset = self.offsets_for(|e| e.b.as_ref(), self.b_start);
 
     format!(
       "@@ -{},{} +{},{} @@",
@@ -297,8 +309,24 @@ impl DiffHunk {
     F: FnMut(&Edit) -> Option<&Line>,
   {
     let lines = self.edits.iter().filter_map(getter).collect::<Vec<_>>();
-    let start = if lines.len() > 0 { lines[0].0 } else { default };
+    let start = if lines.len() > 0 {
+      lines[0].number()
+    } else {
+      default
+    };
     (start, lines.len())
+  }
+}
+
+impl Edit {
+  fn new(kind: DiffType, a: Option<Line>, b: Option<Line>) -> Self {
+    Edit { kind, a, b }
+  }
+}
+
+impl Line {
+  fn number(&self) -> usize {
+    self.0
   }
 }
 
