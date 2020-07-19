@@ -13,7 +13,7 @@ const NULL_SHA: &str = "0000000000000000000000000000000000000000";
 const NULL_PATH: &str = "/dev/null";
 
 #[derive(Debug)]
-struct Diff<'r> {
+struct DiffCmd<'r> {
   repo:   &'r Repository,
   status: Status,
   index:  Ref<'r, Index>,
@@ -47,7 +47,7 @@ fn run(matches: &ArgMatches, ctx: &Context) -> Result<()> {
   let status = repo.status()?;
   let index = repo.index();
 
-  let cmd = Diff {
+  let cmd = DiffCmd {
     repo,
     status,
     index,
@@ -62,7 +62,7 @@ fn run(matches: &ArgMatches, ctx: &Context) -> Result<()> {
   Ok(())
 }
 
-impl<'r> Diff<'r> {
+impl<'r> DiffCmd<'r> {
   fn print_workspace_diff(&self, ctx: &Context) {
     for (path, state) in self.status.workspace_diff().iter() {
       match state {
