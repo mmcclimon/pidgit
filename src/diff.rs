@@ -81,6 +81,9 @@ impl std::fmt::Display for Edit {
 }
 
 impl DiffHunk {
+  // Here, we want to move the strings from diff into hunk.edits. I think right
+  // now we _have_ to clone these, because this algorithm means that the same
+  // line can appear in multiple hunks.
   pub fn filter(diff: Vec<Edit>) -> Vec<Self> {
     let mut hunks = vec![];
     let mut offset: isize = 0;

@@ -12,6 +12,7 @@ pub struct Myers {
 struct Trace(usize, usize, usize, usize);
 
 impl Myers {
+  // strings now owned by wrapping vecs
   pub fn new(a: String, b: String) -> Self {
     Self {
       a: a
@@ -29,30 +30,19 @@ impl Myers {
     }
   }
 
-  pub fn diff(&self) -> Vec<Edit> {
+  // consumes self, so that we can move strings into Edit
+  pub fn diff(mut self) -> Vec<Edit> {
     let mut diff = vec![];
     for trace in self.backtrack() {
-      let a_line = &self.a.get(trace.prev_x());
-      let b_line = &self.b.get(trace.prev_y());
+      let a_line = self.a.take(trace.prev_x());
+      let b_line = self.b.take(trace.prev_y());
 
       if trace.x() == trace.prev_x() {
-        diff.push(Edit::new(
-          DiffType::Ins,
-          None,
-          Some(b_line.unwrap().clone()),
-        ))
+        diff.push(Edit::new(DiffType::Ins, None, b_line));
       } else if trace.y() == trace.prev_y() {
-        diff.push(Edit::new(
-          DiffType::Del,
-          Some(a_line.unwrap().clone()),
-          None,
-        ))
+        diff.push(Edit::new(DiffType::Del, a_line, None));
       } else {
-        diff.push(Edit::new(
-          DiffType::Eql,
-          Some(a_line.unwrap().clone()),
-          Some(b_line.unwrap().clone()),
-        ))
+        diff.push(Edit::new(DiffType::Eql, a_line, b_line));
       }
     }
 

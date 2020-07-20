@@ -48,4 +48,14 @@ impl<T: Default + Clone> WrappingVec<T> {
   pub fn get(&self, idx: usize) -> Option<&T> {
     self.storage.get(idx)
   }
+
+  // take ownership of an element, replacing it with the default
+  pub fn take(&mut self, idx: usize) -> Option<T> {
+    if self.get(idx).is_some() {
+      let el = std::mem::replace(&mut self.storage[idx], Default::default());
+      Some(el)
+    } else {
+      None
+    }
+  }
 }
