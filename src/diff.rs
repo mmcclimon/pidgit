@@ -280,7 +280,7 @@ impl DiffHunk {
     let mut counter = -1;
 
     while counter != 0 {
-      if offset >= 0 && counter > 0 {
+      if offset >= 0 && counter > 0 && offset < diff.len() as isize {
         self.edits.push(diff[offset as usize].clone());
       }
 
