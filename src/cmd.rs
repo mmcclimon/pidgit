@@ -1,6 +1,9 @@
 use crate::prelude::*;
 use clap::ArgMatches;
-use std::{cell::RefCell, collections::BTreeMap, path::PathBuf};
+use std::{
+  cell::RefCell, collections::BTreeMap, io::prelude::*, path::PathBuf,
+  process::Child,
+};
 
 mod add;
 mod cat_file;
@@ -25,6 +28,7 @@ pub struct Context<'w> {
   writer: RefCell<Box<dyn std::io::Write + 'w>>,
   repo:   Option<&'w Repository>,
   pwd:    PathBuf,
+  pager:  RefCell<Option<Child>>,
 }
 
 pub struct CommandSet {
@@ -69,6 +73,7 @@ impl<'w> Context<'w> {
       repo,
       writer: RefCell::new(Box::new(writer)),
       pwd,
+      pager: RefCell::new(None),
     }
   }
 
@@ -79,10 +84,44 @@ impl<'w> Context<'w> {
   }
 
   pub fn println(&self, out: String) {
+    if self.pager.borrow().is_some() {
+      writeln!(
+        self
+          .pager
+          .borrow_mut()
+          .as_mut()
+          .unwrap()
+          .stdin
+          .as_mut()
+          .unwrap(),
+        "{}",
+        out
+      )
+      .unwrap();
+      return;
+    }
+
     writeln!(self.writer.borrow_mut(), "{}", out).unwrap();
   }
 
   pub fn println_color(&self, out: String, style: ansi_term::Style) {
+    if self.pager.borrow().is_some() {
+      writeln!(
+        self
+          .pager
+          .borrow_mut()
+          .as_mut()
+          .unwrap()
+          .stdin
+          .as_mut()
+          .unwrap(),
+        "{}",
+        util::colored(&out, style),
+      )
+      .unwrap();
+      return;
+    }
+
     writeln!(self.writer.borrow_mut(), "{}", util::colored(&out, style)).unwrap();
   }
 
@@ -92,4 +131,40 @@ impl<'w> Context<'w> {
     writer.write(b"\n")?;
     Ok(())
   }
+
+  pub fn setup_pager(&self) -> Result<()> {
+    if self.pager.borrow().is_some() || !atty::is(atty::Stream::Stdout) {
+      return Ok(());
+    }
+
+    self.pager.replace(Some(new_pager()));
+
+    Ok(())
+  }
+
+  pub fn maybe_wait_for_pager(&self) {
+    if self.pager.borrow().is_none() {
+      return;
+    }
+
+    self
+      .pager
+      .borrow_mut()
+      .as_mut()
+      .unwrap()
+      .wait()
+      .expect("couldn't waitpid?");
+  }
+}
+
+fn new_pager() -> Child {
+  use std::process::{Command, Stdio};
+  // TODO: allow customization of this.
+  let process = Command::new("less")
+    .args(&["-R"])
+    .stdin(Stdio::piped())
+    .spawn()
+    .expect("could not open pager!");
+
+  process
 }

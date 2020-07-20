@@ -54,6 +54,8 @@ fn run(matches: &ArgMatches, ctx: &Context) -> Result<()> {
     index,
   };
 
+  ctx.setup_pager()?;
+
   if matches.is_present("cached") {
     cmd.print_index_diff(ctx);
   } else {

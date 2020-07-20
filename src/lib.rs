@@ -86,6 +86,8 @@ impl PidgitApp {
 
     command(matches, &ctx)?;
 
+    ctx.maybe_wait_for_pager();
+
     Ok(())
   }
 }
