@@ -1,7 +1,10 @@
 use crate::prelude::*;
 use clap::ArgMatches;
 use std::{
-  cell::RefCell, collections::BTreeMap, io::prelude::*, path::PathBuf,
+  cell::{RefCell, RefMut},
+  collections::BTreeMap,
+  io::prelude::*,
+  path::PathBuf,
   process::Child,
 };
 
@@ -83,21 +86,20 @@ impl<'w> Context<'w> {
       .ok_or_else(|| PidgitError::Generic("not a pidgit repository".to_string()))
   }
 
+  pub fn has_pager(&self) -> bool {
+    self.pager.borrow().is_some()
+  }
+
+  // assumes that we _have_ a pager!
+  fn pager_handle(&self) -> RefMut<std::process::ChildStdin> {
+    RefMut::map(self.pager.borrow_mut(), |p| {
+      p.as_mut().unwrap().stdin.as_mut().unwrap()
+    })
+  }
+
   pub fn println(&self, out: String) {
-    if self.pager.borrow().is_some() {
-      writeln!(
-        self
-          .pager
-          .borrow_mut()
-          .as_mut()
-          .unwrap()
-          .stdin
-          .as_mut()
-          .unwrap(),
-        "{}",
-        out
-      )
-      .unwrap();
+    if self.has_pager() {
+      writeln!(self.pager_handle(), "{}", out).unwrap();
       return;
     }
 
@@ -105,20 +107,8 @@ impl<'w> Context<'w> {
   }
 
   pub fn println_color(&self, out: String, style: ansi_term::Style) {
-    if self.pager.borrow().is_some() {
-      writeln!(
-        self
-          .pager
-          .borrow_mut()
-          .as_mut()
-          .unwrap()
-          .stdin
-          .as_mut()
-          .unwrap(),
-        "{}",
-        util::colored(&out, style),
-      )
-      .unwrap();
+    if self.has_pager() {
+      writeln!(self.pager_handle(), "{}", util::colored(&out, style),).unwrap();
       return;
     }
 
@@ -143,7 +133,7 @@ impl<'w> Context<'w> {
   }
 
   pub fn maybe_wait_for_pager(&self) {
-    if self.pager.borrow().is_none() {
+    if !self.has_pager() {
       return;
     }
 
