@@ -10,6 +10,7 @@ use std::{
 
 mod add;
 mod cat_file;
+mod check_ref_format;
 mod commit;
 mod diff;
 mod dump_index;
@@ -44,6 +45,7 @@ impl CommandSet {
 
     commands.insert("add", add::command());
     commands.insert("cat-file", cat_file::command());
+    commands.insert("check-ref-format", check_ref_format::command());
     commands.insert("commit", commit::command());
     commands.insert("diff", diff::command());
     commands.insert("dump-index", dump_index::command());
