@@ -1,8 +1,9 @@
+mod grefs;
 mod status;
+pub use grefs::Grefs;
 pub use status::{ChangeType, Status};
 
 use flate2::{write::ZlibEncoder, Compression};
-use sha1::Sha1;
 use std::cell::{Ref, RefCell, RefMut};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::ffi::OsString;
@@ -13,7 +14,6 @@ use std::path::{Path, PathBuf};
 use crate::index::Index;
 use crate::object::{Blob, Commit, Object, Person, Tree};
 use crate::prelude::*;
-use crate::Lockfile;
 
 const GIT_DIR_NAME: &str = ".pidgit";
 const HEAD: &str = "ref: refs/heads/main\n";
@@ -32,6 +32,7 @@ pub struct Repository {
   workspace: Workspace,
   git_dir:   PathBuf,
   index:     RefCell<Index>,
+  grefs:     RefCell<Grefs>,
 }
 
 #[derive(Debug)]
@@ -74,6 +75,7 @@ impl Repository {
       workspace,
       git_dir: git_dir.to_path_buf(),
       index: RefCell::new(index),
+      grefs: RefCell::new(Grefs::new(git_dir.to_path_buf())),
     })
   }
 
@@ -143,6 +145,10 @@ impl Repository {
     &self.workspace
   }
 
+  pub fn grefs(&self) -> Ref<Grefs> {
+    self.grefs.borrow()
+  }
+
   // given a path relative to git_dir, create that file
   pub fn create_file<P>(&self, path: P) -> Result<File>
   where
@@ -160,16 +166,6 @@ impl Repository {
       .recursive(true)
       .create(self.git_dir.join(path))
       .map_err(|e| e.into())
-  }
-
-  // give it a path relative to .git_dir, read into a string
-  pub fn read_file<P>(&self, path: P) -> Result<String>
-  where
-    P: AsRef<Path> + std::fmt::Debug,
-  {
-    let mut s = String::new();
-    File::open(self.git_dir().join(path))?.read_to_string(&mut s)?;
-    Ok(s.trim().to_string())
   }
 
   fn path_exists<P>(&self, path: P) -> bool
@@ -240,25 +236,8 @@ impl Repository {
   }
 
   fn resolve_ref(&self, refstr: &str) -> Result<Object> {
-    let res = self.read_file(refstr);
-
-    // if we got an error and we're looking for a symref, return a better error.
-    if let Err(PidgitError::Io(err)) = res {
-      if refstr.starts_with("refs") {
-        return Err(PidgitError::RefNotFound(refstr.to_string()));
-      } else {
-        return Err(PidgitError::Io(err));
-      }
-    }
-
-    let raw = res.unwrap();
-
-    if raw.starts_with("ref: ") {
-      let symref = raw.trim_start_matches("ref: ");
-      self.resolve_ref(symref)
-    } else {
-      self.object_for_sha(&raw)
-    }
+    let sha = self.grefs().resolve(refstr)?;
+    self.resolve_sha(&sha)
   }
 
   fn resolve_sha(&self, sha: &str) -> Result<Object> {
@@ -328,28 +307,6 @@ impl Repository {
     self.resolve_ref("HEAD").and_then(|c| c.as_commit()).ok()
   }
 
-  pub fn update_head(&self, new_sha: &Sha1) -> Result<()> {
-    // we must read the content of .git/HEAD. If that's a gitref, we find the
-    // open that other file instead. If it's not a gitref, it must be a sha
-    // (i.e., we're in detached head mode), so we lock the head file itself.
-    let raw = self.read_file("HEAD")?;
-
-    let ref_path = if raw.starts_with("ref: ") {
-      raw.trim_start_matches("ref: ")
-    } else {
-      // must be a sha
-      "HEAD"
-    };
-
-    let lockfile = Lockfile::new(self.git_dir().join(ref_path));
-    let mut lock = lockfile.lock()?;
-
-    lock.write_all(format!("{}\n", new_sha.hexdigest()).as_bytes())?;
-    lock.commit()?;
-
-    Ok(())
-  }
-
   pub fn commit(
     &self,
     message: &str,
@@ -384,7 +341,7 @@ impl Repository {
     // we write the tree, then write the commit.
     self.write_tree(&tree)?;
     self.write_object(&commit)?;
-    self.update_head(&commit.sha())?;
+    self.grefs().update_head(&commit.sha())?;
 
     Ok(commit)
   }
