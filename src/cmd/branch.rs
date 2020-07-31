@@ -18,7 +18,15 @@ fn app() -> ClapApp {
     .arg(Arg::with_name("newbranch").help("new branch name"))
 }
 
-fn run(_matches: &ArgMatches, ctx: &Context) -> Result<()> {
+fn run(matches: &ArgMatches, ctx: &Context) -> Result<()> {
+  let repo = ctx.repo()?;
+
+  if let Some(name) = matches.value_of("newbranch") {
+    let head = repo.head().expect("no head?");
+    repo.grefs().create_branch(name, &head.sha().hexdigest())?;
+    return Ok(());
+  }
+
   ctx.println("branch".to_string());
   Ok(())
 }

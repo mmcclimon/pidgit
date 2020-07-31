@@ -69,12 +69,36 @@ impl Grefs {
       "HEAD"
     };
 
+    self.update_ref_file(ref_path, &new_sha.hexdigest())
+  }
+
+  fn update_ref_file(&self, ref_path: &str, new_sha: &str) -> Result<()> {
     let lockfile = Lockfile::new(self.git_dir.join(ref_path));
     let mut lock = lockfile.lock()?;
 
-    lock.write_all(format!("{}\n", new_sha.hexdigest()).as_bytes())?;
+    lock.write_all(format!("{}\n", new_sha).as_bytes())?;
     lock.commit()?;
 
     Ok(())
+  }
+
+  pub fn create_branch(&self, refname: &str, sha: &str) -> Result<()> {
+    if !util::is_valid_refname(refname) {
+      return Err(PidgitError::InvalidRefName(refname.to_string()));
+    }
+
+    let pathstr = format!("refs/heads/{}", refname);
+
+    if self.resolve(&pathstr).is_ok() {
+      return Err(PidgitError::Generic(format!(
+        "A branch named '{}' already exists",
+        refname
+      )));
+    }
+
+    // create parent dir!
+    std::fs::create_dir_all(PathBuf::from(&pathstr).parent().unwrap())?;
+
+    self.update_ref_file(&pathstr, sha)
   }
 }
