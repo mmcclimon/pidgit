@@ -178,6 +178,15 @@ impl Commit {
       .collect()
   }
 
+  // first parent, which is almost certainly wrong for merges
+  pub fn parent(&self, repo: &Repository) -> Option<Commit> {
+    self.parent_shas.get(0).and_then(|sha| {
+      repo
+        .try_resolve_sha(sha)
+        .and_then(|obj| obj.as_commit().ok())
+    })
+  }
+
   pub fn title(&self) -> &str {
     let idx = self
       .message
