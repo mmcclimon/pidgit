@@ -1,5 +1,8 @@
 use std::collections::HashSet;
 
+use crate::object::Object;
+use crate::prelude::*;
+
 // docs from git-check-ref-name
 // 1.  They can include slash / for hierarchical (directory) grouping, but no
 //     slash-separated component can begin with a dot . or end with the sequence
@@ -93,6 +96,37 @@ fn parse_rev(revision: &str) -> Option<Revision> {
   } else {
     None
   }
+}
+
+fn resolve_rev(revision: &Revision, repo: &Repository) -> Option<Object> {
+  match revision {
+    Revision::Ref(refname) => repo.resolve_ref(refname).ok(),
+    Revision::Parent(rev) => resolve_rev(rev, repo).and_then(|obj| match obj {
+      Object::Commit(commit) => commit.parent(repo).map(|c| Object::Commit(c)),
+      _ => None,
+    }),
+    Revision::Ancestor(ref rev, mut n) => {
+      resolve_rev(rev, repo).and_then(|obj| {
+        let mut commit = match obj {
+          Object::Commit(commit) => Some(commit),
+          _ => None,
+        };
+
+        while commit.is_some() && n > 0 {
+          commit = commit.unwrap().parent(repo);
+          n -= 1;
+        }
+
+        commit.map(|c| Object::Commit(c))
+      })
+    },
+  }
+}
+
+// This is here, rather than in the repo impl, so that we don't have to leak the
+// Revision enum, which isn't generally useful elsewhere.
+pub fn resolve_revision(revstr: &str, repo: &Repository) -> Option<Object> {
+  parse_rev(revstr).and_then(|rev| resolve_rev(&rev, repo))
 }
 
 #[cfg(test)]

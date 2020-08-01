@@ -1,7 +1,7 @@
 mod rev_parse;
 mod wrapping_vec;
 
-pub use rev_parse::is_valid_refname;
+pub use rev_parse::{is_valid_refname, resolve_revision};
 pub use wrapping_vec::WrappingVec;
 
 use ansi_term::{ANSIGenericString, Style};

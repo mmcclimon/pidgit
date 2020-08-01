@@ -168,13 +168,6 @@ impl Repository {
       .map_err(|e| e.into())
   }
 
-  fn path_exists<P>(&self, path: P) -> bool
-  where
-    P: AsRef<Path> + std::fmt::Debug,
-  {
-    self.git_dir().join(path).is_file()
-  }
-
   pub fn object_for_sha(&self, sha: &str) -> Result<Object> {
     Object::from_git_db(&self.path_for_sha(sha))
   }
@@ -210,37 +203,18 @@ impl Repository {
   }
 
   pub fn resolve_object(&self, name: &str) -> Result<Object> {
-    // this may get more smarts later
-    let to_match = match name {
-      "head" | "@" => "HEAD",
-      _ => name,
-    };
-
-    // this algorithm directly from git rev-parse docs
-    for prefix in &[".", "refs", "refs/tags", "refs/heads", "refs/remotes"] {
-      let joined = format!("{}/{}", prefix, to_match);
-
-      if self.path_exists(&joined) {
-        return self.resolve_ref(&joined);
-      }
+    match util::resolve_revision(name, self) {
+      Some(rev) => Ok(rev),
+      None => self.resolve_sha(name),
     }
-
-    // also check head of remotes
-    let remote_head = format!("refs/remotes/{}/HEAD", to_match);
-    if self.path_exists(&remote_head) {
-      return self.resolve_ref(&remote_head);
-    }
-
-    // not found yet, assume a sha
-    self.resolve_sha(to_match)
   }
 
-  fn resolve_ref(&self, refstr: &str) -> Result<Object> {
+  pub fn resolve_ref(&self, refstr: &str) -> Result<Object> {
     let sha = self.grefs().resolve(refstr)?;
     self.resolve_sha(&sha)
   }
 
-  fn resolve_sha(&self, sha: &str) -> Result<Object> {
+  pub fn resolve_sha(&self, sha: &str) -> Result<Object> {
     if sha.len() < 4 {
       return Err(PidgitError::ObjectNotFound(format!(
         "{} is too short to be a sha",
@@ -280,6 +254,10 @@ impl Repository {
       1 => Object::from_git_db(&paths[0]),
       _ => Err(PidgitError::ObjectNotFound(format!("{} is ambiguous", sha))),
     }
+  }
+
+  pub fn try_resolve_sha(&self, sha: &str) -> Option<Object> {
+    self.resolve_sha(sha).ok()
   }
 
   pub fn index(&self) -> Ref<Index> {

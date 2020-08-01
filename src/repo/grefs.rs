@@ -23,6 +23,8 @@ impl Grefs {
     Grefs { git_dir }
   }
 
+  // utilities
+
   // give it a path relative to .git_dir, read into a string
   fn read_file<P>(&self, path: P) -> Result<String>
   where
@@ -33,9 +35,21 @@ impl Grefs {
     Ok(s.trim().to_string())
   }
 
+  fn path_exists<P>(&self, path: P) -> bool
+  where
+    P: AsRef<Path> + std::fmt::Debug,
+  {
+    self.git_dir.join(path).is_file()
+  }
+
   // this returns a sha
   pub fn resolve(&self, refstr: &str) -> Result<String> {
-    let res = self.read_file(refstr);
+    let path = self.path_for_name(refstr);
+    if path.is_none() {
+      return Err(PidgitError::RefNotFound(refstr.into()));
+    }
+
+    let res = self.read_file(path.unwrap());
 
     // if we got an error and we're looking for a symref, return a better error.
     if let Err(PidgitError::Io(err)) = res {
@@ -54,6 +68,25 @@ impl Grefs {
     } else {
       Ok(raw)
     }
+  }
+
+  pub fn path_for_name(&self, name: &str) -> Option<String> {
+    // this algorithm directly from git rev-parse docs
+    for prefix in &["", "refs/", "refs/tags/", "refs/heads/", "refs/remotes/"] {
+      let joined = format!("{}{}", prefix, name);
+
+      if self.path_exists(&joined) {
+        return Some(joined);
+      }
+    }
+
+    // also check head of remotes
+    let remote_head = format!("refs/remotes/{}/HEAD", name);
+    if self.path_exists(&remote_head) {
+      return Some(remote_head);
+    }
+
+    None
   }
 
   pub fn update_head(&self, new_sha: &Sha1) -> Result<()> {
