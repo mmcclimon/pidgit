@@ -53,6 +53,48 @@ pub fn is_valid_refname(s: &str) -> bool {
   true
 }
 
+// silly
+fn is_valid_refname_allow_at(s: &str) -> bool {
+  if s == "@" {
+    true
+  } else {
+    is_valid_refname(s)
+  }
+}
+
+#[allow(unused)]
+#[derive(Debug, PartialEq, Eq)]
+enum Revision {
+  Ref(String),
+  Parent(Box<Revision>),
+  Ancestor(Box<Revision>, u32),
+}
+
+#[allow(unused)]
+// Parse a revision into an AST (a Revision enum). These boxes are kind of
+// annoying, but such is life.
+fn parse_rev(revision: &str) -> Option<Revision> {
+  if revision.ends_with('^') {
+    let rev = parse_rev(&revision[0..revision.len() - 1]);
+    rev.map(|parent| Revision::Parent(Box::new(parent)))
+  } else if revision.contains('~') {
+    // regex would really be better here
+    let hunks = revision.split('~').take(2).collect::<Vec<_>>();
+    let n = if let Ok(num) = hunks[1].parse::<u32>() {
+      num
+    } else {
+      return None;
+    };
+
+    parse_rev(hunks[0]).map(|ancestor| Revision::Ancestor(Box::new(ancestor), n))
+  } else if is_valid_refname_allow_at(revision) {
+    let name = if revision == "@" { "HEAD" } else { revision };
+    Some(Revision::Ref(name.to_string()))
+  } else {
+    None
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -100,5 +142,39 @@ mod tests {
     for name in good {
       assert!(is_valid_refname(name), format!("name is ok: {:?}", name));
     }
+  }
+
+  #[test]
+  fn parse() {
+    use Revision::*;
+    assert_eq!(
+      parse_rev("master^"),
+      Some(Parent(Box::new(Ref("master".into()))))
+    );
+
+    assert_eq!(parse_rev("@^"), Some(Parent(Box::new(Ref("HEAD".into())))));
+
+    assert_eq!(
+      parse_rev("HEAD~42"),
+      Some(Ancestor(Box::new(Ref("HEAD".into())), 42))
+    );
+
+    #[rustfmt::skip]
+    assert_eq!(
+      parse_rev("master^^"),
+      Some(Parent(Box::new(Parent(Box::new(Ref("master".into()))))))
+    );
+
+    assert_eq!(
+      parse_rev("abc123~3^"),
+      Some(Parent(Box::new(Ancestor(
+        Box::new(Ref("abc123".into())),
+        3
+      ))))
+    );
+
+    assert_eq!(parse_rev("/../foo^"), None);
+    assert_eq!(parse_rev("apple:pie~3"), None);
+    assert_eq!(parse_rev("foo~banana"), None);
   }
 }
