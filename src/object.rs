@@ -140,4 +140,8 @@ impl Object {
       _ => Err(PidgitError::InvalidObject("tree")),
     }
   }
+
+  pub fn sha(&self) -> Sha1 {
+    self.get_ref().sha()
+  }
 }
