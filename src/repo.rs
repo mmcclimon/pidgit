@@ -203,10 +203,8 @@ impl Repository {
   }
 
   pub fn resolve_object(&self, name: &str) -> Result<Object> {
-    match util::resolve_revision(name, self) {
-      Some(rev) => Ok(rev),
-      None => self.resolve_sha(name),
-    }
+    util::resolve_revision(name, self)
+      .ok_or(PidgitError::ObjectNotFound(name.into()))
   }
 
   pub fn resolve_ref(&self, refstr: &str) -> Result<Object> {
