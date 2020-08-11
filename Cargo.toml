@@ -21,8 +21,10 @@ atty = "0.2"
 bit-vec = "0.6"
 chrono = "0.4"
 clap = "2.3"
+pretty_env_logger = "0.4"
 flate2 = "1.0"
 hex = "0.4"
+log = "0.4"
 sha1 = { version = "0.6", features = [ "std" ] }
 
 [dev-dependencies]
