@@ -104,10 +104,7 @@ fn resolve_rev(revision: &Revision, repo: &Repository) -> Option<Object> {
       .resolve_ref(refname)
       .or_else(|_| repo.resolve_sha(refname))
       .ok()
-      .and_then(|obj| match obj {
-        Object::Commit(_) => Some(obj),
-        _ => None,
-      }),
+      .and_then(|obj| Some(obj)),
     Revision::Parent(rev) => resolve_rev(rev, repo).and_then(|obj| match obj {
       Object::Commit(commit) => commit.parent(repo).map(|c| Object::Commit(c)),
       _ => None,
