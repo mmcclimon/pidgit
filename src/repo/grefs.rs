@@ -1,3 +1,4 @@
+use log::trace;
 use sha1::Sha1;
 use std::{
   fs::File,
@@ -76,6 +77,7 @@ impl Grefs {
       let joined = format!("{}{}", prefix, name);
 
       if self.path_exists(&joined) {
+        trace!("resolving {}, found at {}", name, joined);
         return Some(joined);
       }
     }
@@ -83,9 +85,12 @@ impl Grefs {
     // also check head of remotes
     let remote_head = format!("refs/remotes/{}/HEAD", name);
     if self.path_exists(&remote_head) {
+      trace!("resolving {}, found at {}", name, remote_head);
+      trace!("resolving {}, found at {}", name, remote_head);
       return Some(remote_head);
     }
 
+    trace!("resolving {}, not found!", name);
     None
   }
 

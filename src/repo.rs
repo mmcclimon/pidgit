@@ -4,6 +4,7 @@ pub use grefs::Grefs;
 pub use status::{ChangeType, Status};
 
 use flate2::{write::ZlibEncoder, Compression};
+use log::{debug, trace};
 use std::cell::{Ref, RefCell, RefMut};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::ffi::OsString;
@@ -70,6 +71,8 @@ impl Repository {
 
     let mut index = Index::new(git_dir.join("index"));
     index.load()?;
+
+    debug!("loading git repo at {:?}", git_dir);
 
     Ok(Repository {
       workspace,
@@ -203,6 +206,7 @@ impl Repository {
   }
 
   pub fn resolve_object(&self, name: &str) -> Result<Object> {
+    trace!("resolving {}", name);
     util::resolve_revision(name, self)
       .ok_or(PidgitError::ObjectNotFound(name.into()))
   }
@@ -246,6 +250,8 @@ impl Repository {
           .starts_with(&rest)
       })
       .collect::<Vec<_>>();
+
+    trace!("sha prefix match found {} paths", paths.len());
 
     match paths.len() {
       0 => not_found,
