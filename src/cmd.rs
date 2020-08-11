@@ -14,6 +14,7 @@ mod cat_file;
 mod check_ref_format;
 mod commit;
 mod diff;
+mod diff_tree;
 mod dump_index;
 mod dump_tree;
 mod hash_object;
@@ -50,6 +51,7 @@ impl CommandSet {
     commands.insert("check-ref-format", check_ref_format::command());
     commands.insert("commit", commit::command());
     commands.insert("diff", diff::command());
+    commands.insert("diff-tree", diff_tree::command());
     commands.insert("dump-index", dump_index::command());
     commands.insert("dump-tree", dump_tree::command());
     commands.insert("hash-object", hash_object::command());
