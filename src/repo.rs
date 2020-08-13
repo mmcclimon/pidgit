@@ -171,18 +171,22 @@ impl Repository {
       .map_err(|e| e.into())
   }
 
-  pub fn object_for_sha(&self, sha: &str) -> Result<Object> {
+  pub fn object_for_sha(&self, sha: &Sha) -> Result<Object> {
     Object::from_git_db(&self.path_for_sha(sha))
   }
 
+  pub fn try_object_for_sha(&self, sha: &Sha) -> Option<Object> {
+    self.object_for_sha(sha).ok()
+  }
+
   // NB returns an absolute path!
-  pub fn path_for_sha(&self, sha: &str) -> PathBuf {
-    let (first, rest) = sha.split_at(2);
+  pub fn path_for_sha(&self, sha: &Sha) -> PathBuf {
+    let (first, rest) = sha.split_for_path();
     self.git_dir.join(format!("objects/{}/{}", first, rest))
   }
 
   pub fn write_object(&self, obj: &dyn GitObject) -> Result<()> {
-    let path = self.path_for_sha(&obj.sha().hexdigest());
+    let path = self.path_for_sha(&obj.sha());
 
     // I am ignoring, here, the possibility that this path exists and might
     // somehow conflict??
@@ -213,9 +217,10 @@ impl Repository {
 
   pub fn resolve_ref(&self, refstr: &str) -> Result<Object> {
     let sha = self.grefs().resolve(refstr)?;
-    self.resolve_sha(&sha)
+    self.object_for_sha(&sha)
   }
 
+  // sha is a &str here because it might be a fragment
   pub fn resolve_sha(&self, sha: &str) -> Result<Object> {
     if sha.len() < 4 {
       return Err(PidgitError::ObjectNotFound(format!(
@@ -225,7 +230,7 @@ impl Repository {
     }
 
     if sha.len() == 40 {
-      return self.object_for_sha(sha);
+      return self.object_for_sha(&sha.into());
     }
 
     let not_found = Err(PidgitError::ObjectNotFound(sha.to_string()));
@@ -258,10 +263,6 @@ impl Repository {
       1 => Object::from_git_db(&paths[0]),
       _ => Err(PidgitError::ObjectNotFound(format!("{} is ambiguous", sha))),
     }
-  }
-
-  pub fn try_resolve_sha(&self, sha: &str) -> Option<Object> {
-    self.resolve_sha(sha).ok()
   }
 
   pub fn index(&self) -> Ref<Index> {
@@ -298,7 +299,7 @@ impl Repository {
     let head = self.resolve_object("HEAD").ok();
 
     let parents = if let Some(head) = head {
-      vec![head.into_inner().sha().hexdigest()]
+      vec![head.into_inner().sha()]
     } else {
       vec![]
     };
@@ -312,7 +313,7 @@ impl Repository {
     let tree = Tree::from(self.index());
 
     let commit = Commit {
-      tree: tree.sha().hexdigest(),
+      tree: tree.sha(),
       parent_shas: parents,
       author,
       committer,

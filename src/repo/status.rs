@@ -195,8 +195,7 @@ impl<'r> InnerStatus<'r> {
         &self.repo.workspace().canonicalize(path),
         Some(stat),
       )
-      .expect("could not calculate sha")
-      .hexdigest();
+      .expect("could not calculate sha");
 
       if sha == entry.sha {
         // if we've gotten here, we know the index stat time is stale
@@ -222,7 +221,7 @@ impl<'r> InnerStatus<'r> {
 
       let have = self.head_diff.get(path).unwrap();
 
-      if have.mode() != entry.mode() || have.sha() != entry.sha {
+      if have.mode() != entry.mode() || have.sha() != &entry.sha {
         self.index_diff.insert(path.clone(), ChangeType::Modified);
         continue;
       }
@@ -242,14 +241,15 @@ impl<'r> InnerStatus<'r> {
       return Ok(());
     }
 
-    let tree = head.unwrap().tree().to_string();
+    let head = head.unwrap();
+    let tree = head.tree();
     self.read_tree(&tree, &PathBuf::from(""))?;
 
     Ok(())
   }
 
-  fn read_tree(&mut self, sha: &str, prefix: &PathBuf) -> Result<()> {
-    let tree = self.repo.resolve_object(sha)?.as_tree()?;
+  fn read_tree(&mut self, sha: &Sha, prefix: &PathBuf) -> Result<()> {
+    let tree = self.repo.object_for_sha(sha)?.as_tree()?;
 
     for (path, entry) in tree.entries() {
       if let TreeItem::Entry(e) = entry {

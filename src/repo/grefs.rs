@@ -1,5 +1,4 @@
 use log::trace;
-use sha1::Sha1;
 use std::{
   fs::File,
   io::prelude::*,
@@ -44,7 +43,7 @@ impl Grefs {
   }
 
   // this returns a sha
-  pub fn resolve(&self, refstr: &str) -> Result<String> {
+  pub fn resolve(&self, refstr: &str) -> Result<Sha> {
     let path = self.path_for_name(refstr);
     if path.is_none() {
       return Err(PidgitError::RefNotFound(refstr.into()));
@@ -67,7 +66,7 @@ impl Grefs {
       let symref = raw.trim_start_matches("ref: ");
       self.resolve(symref)
     } else {
-      Ok(raw)
+      Ok(raw.into())
     }
   }
 
@@ -94,7 +93,7 @@ impl Grefs {
     None
   }
 
-  pub fn update_head(&self, new_sha: &Sha1) -> Result<()> {
+  pub fn update_head(&self, new_sha: &Sha) -> Result<()> {
     // we must read the content of .git/HEAD. If that's a gitref, we find the
     // open that other file instead. If it's not a gitref, it must be a sha
     // (i.e., we're in detached head mode), so we lock the head file itself.
@@ -120,7 +119,7 @@ impl Grefs {
     Ok(())
   }
 
-  pub fn create_branch(&self, refname: &str, sha: &str) -> Result<()> {
+  pub fn create_branch(&self, refname: &str, sha: &Sha) -> Result<()> {
     if !util::is_valid_refname(refname) {
       return Err(PidgitError::InvalidRefName(refname.to_string()));
     }
@@ -137,6 +136,6 @@ impl Grefs {
     // create parent dir!
     std::fs::create_dir_all(PathBuf::from(&pathstr).parent().unwrap())?;
 
-    self.update_ref_file(&pathstr, sha)
+    self.update_ref_file(&pathstr, &sha.hexdigest())
   }
 }

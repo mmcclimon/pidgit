@@ -25,7 +25,7 @@ fn run(matches: &ArgMatches, ctx: &Context) -> Result<()> {
   if let Some(name) = matches.value_of("branch-name") {
     let start_ref = matches.value_of("start-point").unwrap_or("HEAD");
     let start = repo.resolve_object(start_ref)?;
-    repo.grefs().create_branch(name, &start.sha().hexdigest())?;
+    repo.grefs().create_branch(name, &start.sha())?;
     return Ok(());
   }
 

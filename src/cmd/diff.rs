@@ -23,7 +23,7 @@ struct DiffCmd<'r> {
 #[derive(Debug)]
 struct DiffTarget {
   path:    PathBuf,
-  sha:     String,
+  sha:     Sha,
   mode:    u32,
   content: String,
 }
@@ -152,7 +152,7 @@ impl<'r> DiffCmd<'r> {
     let bold = Style::new().bold();
 
     ctx.println_color(
-      format!("index {}..{}{}", &a.sha[0..8], &b.sha[0..8], mode_str),
+      format!("index {}..{}{}", a.sha.short(8), b.sha.short(8), mode_str),
       bold,
     );
 
@@ -221,7 +221,7 @@ impl<'r> DiffCmd<'r> {
     // TODO: diff non-strings?
     DiffTarget {
       path:    path.into(),
-      sha:     blob.sha().hexdigest(),
+      sha:     blob.sha(),
       mode:    stat.permissions().mode(),
       content: blob.string_content(),
     }
@@ -232,7 +232,7 @@ impl DiffTarget {
   fn null(path: &OsString) -> Self {
     Self {
       path:    path.into(),
-      sha:     NULL_SHA.to_string(),
+      sha:     NULL_SHA.into(),
       mode:    0,
       content: "".to_string(),
     }

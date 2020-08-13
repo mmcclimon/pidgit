@@ -1,7 +1,9 @@
 mod rev_parse;
+mod sha;
 mod wrapping_vec;
 
 pub use rev_parse::{is_valid_refname, resolve_revision};
+pub use sha::Sha;
 pub use wrapping_vec::WrappingVec;
 
 use ansi_term::{ANSIGenericString, Style};
@@ -55,10 +57,7 @@ pub fn sha_from_path(path: &Path) -> String {
 }
 
 // Get the sha for a file on disk, without reading the whole thing into memory.
-pub fn compute_sha_for_path(
-  path: &Path,
-  meta: Option<&Metadata>,
-) -> Result<Sha1> {
+pub fn compute_sha_for_path(path: &Path, meta: Option<&Metadata>) -> Result<Sha> {
   use std::fs::File;
   use std::io::{BufRead, BufReader};
 
@@ -84,7 +83,7 @@ pub fn compute_sha_for_path(
     reader.consume(len);
   }
 
-  Ok(sha)
+  Ok(sha.into())
 }
 
 fn should_color() -> bool {

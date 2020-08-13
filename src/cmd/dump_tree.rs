@@ -26,15 +26,17 @@ fn run(matches: &ArgMatches, ctx: &Context) -> Result<()> {
 
   let commit = head.as_commit()?;
 
-  let tree = repo.resolve_object(commit.tree())?.into_inner();
+  let tree = repo
+    .resolve_object(&commit.tree().hexdigest())?
+    .into_inner();
 
-  print_tree(&repo, &tree.sha().hexdigest(), &PathBuf::from(""))?;
+  print_tree(&repo, &tree.sha(), &PathBuf::from(""))?;
 
   Ok(())
 }
 
-fn print_tree(repo: &Repository, sha: &str, prefix: &PathBuf) -> Result<()> {
-  let tree = repo.resolve_object(sha)?.as_tree()?;
+fn print_tree(repo: &Repository, sha: &Sha, prefix: &PathBuf) -> Result<()> {
+  let tree = repo.resolve_object(&sha.hexdigest())?.as_tree()?;
 
   for (path, entry) in tree.entries() {
     if let TreeItem::Entry(e) = entry {

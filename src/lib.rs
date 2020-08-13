@@ -22,6 +22,7 @@ pub mod prelude {
   pub use crate::repo::Repository;
   pub use crate::util;
   pub use ansi_term::Color;
+  pub use util::Sha;
 }
 
 // The actual app implementation.

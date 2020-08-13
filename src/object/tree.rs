@@ -31,7 +31,7 @@ pub enum TreeItem {
 pub struct PathEntry {
   pub path: PathBuf,
   pub mode: Mode,
-  pub sha:  String,
+  pub sha:  Sha,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -116,7 +116,7 @@ impl Tree {
 
       entries.push(PathEntry {
         mode,
-        sha: hex::encode(sha),
+        sha: sha.into(),
         path: p.into(),
       });
     }
@@ -180,7 +180,7 @@ impl Tree {
     let mut ret = "40000 ".as_bytes().to_vec();
     ret.extend(self.label.as_bytes());
     ret.push(0);
-    ret.extend(self.sha().digest().bytes().iter());
+    ret.extend(self.sha().bytes());
     ret
   }
 
@@ -218,7 +218,7 @@ impl PathEntry {
 
     ret.extend(self.path.file_name().unwrap().as_bytes());
     ret.push(0);
-    ret.extend(hex::decode(&self.sha).unwrap());
+    ret.extend(&self.sha.bytes());
     ret
   }
 
@@ -230,7 +230,7 @@ impl PathEntry {
     Ok(PathEntry {
       path: path.clone(),
       mode,
-      sha: sha.hexdigest(),
+      sha,
     })
   }
 
@@ -248,8 +248,7 @@ impl PathEntry {
     parents
   }
 
-  // NB this is a string, not a Sha1!
-  pub fn sha(&self) -> &str {
+  pub fn sha(&self) -> &Sha {
     &self.sha
   }
 

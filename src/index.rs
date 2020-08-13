@@ -26,7 +26,7 @@ pub struct Index {
 
 pub struct IndexEntry {
   meta:     EntryMeta,
-  pub sha:  String,
+  pub sha:  Sha,
   flags:    EntryFlags,
   pub name: OsString,
   changed:  bool,
@@ -264,7 +264,7 @@ impl Index {
 
       self.add(IndexEntry {
         meta,
-        sha: hex::encode(sha),
+        sha: sha.into(),
         flags,
         name,
         changed: false,
@@ -410,12 +410,12 @@ impl Index {
 impl IndexEntry {
   pub fn new(key: OsString, path: &PathBuf) -> Result<Self> {
     let meta = path.metadata()?;
-    let sha = util::compute_sha_for_path(path, Some(&meta))?.hexdigest();
+    let sha = util::compute_sha_for_path(path, Some(&meta))?;
 
     Ok(Self::new_from_data(key, sha, meta))
   }
 
-  pub fn new_from_data(name: OsString, sha: String, stat: Metadata) -> Self {
+  pub fn new_from_data(name: OsString, sha: Sha, stat: Metadata) -> Self {
     let flags = EntryFlags::from_path(&name);
     let meta = EntryMeta::from(&stat);
 
@@ -434,7 +434,7 @@ impl IndexEntry {
 
     // I think this is probably not very efficient.
     ret.extend(self.meta.as_bytes());
-    ret.extend(hex::decode(&self.sha).unwrap());
+    ret.extend(self.sha.bytes());
     ret.extend(self.flags.as_bytes().iter());
     ret.extend(self.name.as_os_str().as_bytes());
     ret.push(0);
@@ -591,11 +591,7 @@ mod tests {
   }
 
   fn new_empty_entry(basename: &str) -> IndexEntry {
-    IndexEntry::new_from_data(
-      basename.into(),
-      EMPTY_SHA.to_string(),
-      random_stat(),
-    )
+    IndexEntry::new_from_data(basename.into(), EMPTY_SHA.into(), random_stat())
   }
 
   #[test]
@@ -607,7 +603,7 @@ mod tests {
       .expect("couldn't create entry");
 
     assert_eq!(entry.mode(), 0o100644);
-    assert_eq!(entry.sha, EMPTY_SHA);
+    assert_eq!(entry.sha, EMPTY_SHA.into());
     assert!(entry.name.to_str().unwrap().ends_with("foo.txt"));
   }
 

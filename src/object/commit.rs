@@ -7,8 +7,8 @@ use crate::object::Object;
 use crate::prelude::*;
 
 pub struct Commit {
-  pub tree:        String,      // sha
-  pub parent_shas: Vec<String>, // shas
+  pub tree:        Sha,      // sha
+  pub parent_shas: Vec<Sha>, // shas
   pub author:      Person,
   pub committer:   Person,
   pub message:     String,
@@ -118,7 +118,7 @@ impl Commit {
         "committer" => {
           committer = Some(parse_author_line(&words[1..].join(" ")));
         },
-        "parent" => parents.push(words[1].to_string()),
+        "parent" => parents.push(words[1].into()),
         _ => break,
       }
     }
@@ -128,7 +128,7 @@ impl Commit {
     reader.read_to_string(&mut message).unwrap();
 
     Self {
-      tree: tree.expect("did not find tree"),
+      tree: tree.expect("did not find tree").into(),
       parent_shas: parents,
       author: author.expect("did not find author"),
       committer: committer.expect("did not find committer"),
@@ -182,7 +182,7 @@ impl Commit {
   pub fn parent(&self, repo: &Repository) -> Option<Commit> {
     self.parent_shas.get(0).and_then(|sha| {
       repo
-        .try_resolve_sha(sha)
+        .try_object_for_sha(sha)
         .and_then(|obj| obj.as_commit().ok())
     })
   }
@@ -197,7 +197,7 @@ impl Commit {
     &self.message[0..idx]
   }
 
-  pub fn tree(&self) -> &String {
+  pub fn tree(&self) -> &Sha {
     &self.tree
   }
 }

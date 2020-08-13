@@ -45,11 +45,11 @@ pub trait GitObject: std::fmt::Debug {
       .to_vec()
   }
 
-  fn sha(&self) -> Sha1 {
+  fn sha(&self) -> Sha {
     let mut sha = Sha1::new();
     sha.update(&self.header());
     sha.update(&self.raw_content());
-    sha
+    sha.into()
   }
 
   // default
@@ -60,9 +60,8 @@ pub trait GitObject: std::fmt::Debug {
 
 impl Object {
   pub fn from_git_db(path: &Path) -> Result<Self> {
-    let sha = util::sha_from_path(&path);
-
     if !path.is_file() {
+      let sha = util::sha_from_path(&path);
       return Err(PidgitError::ObjectNotFound(sha));
     }
 
@@ -141,7 +140,7 @@ impl Object {
     }
   }
 
-  pub fn sha(&self) -> Sha1 {
+  pub fn sha(&self) -> Sha {
     self.get_ref().sha()
   }
 }
