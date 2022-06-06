@@ -174,11 +174,11 @@ mod tests {
     ];
 
     for name in bad {
-      assert!(!is_valid_refname(name), format!("name is bad: {:?}", name));
+      assert!(!is_valid_refname(name), "name is bad: {:?}", name);
     }
 
     for name in good {
-      assert!(is_valid_refname(name), format!("name is ok: {:?}", name));
+      assert!(is_valid_refname(name), "name is ok: {:?}", name);
     }
   }
 
